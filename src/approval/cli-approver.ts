@@ -1,3 +1,35 @@
-export const cliApprover = async (message: string): Promise<boolean> => {
-    // logic to approve via CLI
-};
+import readline from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
+import type { ToolRiskLevel } from "../types/tool.js";
+
+export interface ApprovalPayload {
+  toolName: string;
+  reason: string;
+  riskLevel: ToolRiskLevel;
+  preview?: unknown;
+}
+
+export class CliApprover {
+  async requestApproval(payload: ApprovalPayload): Promise<boolean> {
+    console.log("\n=== Approval Required ===");
+    console.log(`Tool: ${payload.toolName}`);
+    console.log(`Risk: ${payload.riskLevel}`);
+    console.log(`Reason: ${payload.reason}`);
+
+    if (payload.preview !== undefined) {
+      console.log("Preview:");
+      console.log(JSON.stringify(payload.preview, null, 2));
+    }
+
+    console.log("=========================\n");
+
+    const rl = readline.createInterface({ input, output });
+
+    try {
+      const answer = await rl.question("Approve? (y/N): ");
+      return ["y", "yes"].includes(answer.trim().toLowerCase());
+    } finally {
+      rl.close();
+    }
+  }
+}

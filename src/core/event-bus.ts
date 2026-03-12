@@ -1,16 +1,15 @@
-class EventBus {
-    private listeners: {[key: string]: Array<Function>} = {};
+import EventEmitter from "eventemitter3";
+import type { ToolEvent } from "../types/tool.js";
 
-    on(event: string, listener: Function) {
-        this.listeners[event] = this.listeners[event] || [];
-        this.listeners[event].push(listener);
-    }
+export class EventBus {
+  private readonly emitter = new EventEmitter();
 
-    emit(event: string, data: any) {
-        if (this.listeners[event]) {
-            this.listeners[event].forEach(listener => listener(data));
-        }
-    }
+  emit(event: ToolEvent) {
+    this.emitter.emit(event.type, event);
+    this.emitter.emit("*", event);
+  }
+
+  on(type: string, listener: (event: ToolEvent) => void) {
+    this.emitter.on(type, listener);
+  }
 }
-
-export const eventBus = new EventBus();

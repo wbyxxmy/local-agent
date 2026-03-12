@@ -1,10 +1,20 @@
-import { exec } from 'child_process';
+import { execa } from "execa";
 
-export const executeCommand = (command: string) => {
-    return new Promise((resolve, reject) => {
-        exec(command, (error, stdout, stderr) => {
-            if (error) reject(stderr);
-            resolve(stdout);
-        });
-    });
-};
+export async function execCommand(
+  command: string,
+  cwd: string,
+  signal?: AbortSignal
+) {
+  const result = await execa(command, {
+    cwd,
+    shell: true,
+    reject: false,
+    signal
+  });
+
+  return {
+    exitCode: result.exitCode,
+    stdout: result.stdout,
+    stderr: result.stderr
+  };
+}

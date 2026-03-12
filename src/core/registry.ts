@@ -1,13 +1,20 @@
-class Registry {
-    private services: {[key: string]: any} = {};
+import type { ToolDefinition } from "../types/tool.js";
 
-    register(name: string, service: any) {
-        this.services[name] = service;
-    }
+export class ToolRegistry {
+  private readonly tools = new Map<string, ToolDefinition<any, any>>();
 
-    get(name: string) {
-        return this.services[name];
+  register(tool: ToolDefinition<any, any>) {
+    if (this.tools.has(tool.name)) {
+      throw new Error(`Tool already registered: ${tool.name}`);
     }
+    this.tools.set(tool.name, tool);
+  }
+
+  get(name: string) {
+    return this.tools.get(name);
+  }
+
+  list() {
+    return [...this.tools.values()];
+  }
 }
-
-export const registry = new Registry();

@@ -1,13 +1,21 @@
-class SessionMemory {
-    private memory: {[key: string]: any} = {};
-
-    get(key: string) {
-        return this.memory[key];
-    }
-
-    set(key: string, value: any) {
-        this.memory[key] = value;
-    }
+export interface SessionMessage {
+  role: "user" | "assistant" | "system" | "tool";
+  content: string;
+  timestamp: number;
 }
 
-export const sessionMemory = new SessionMemory();
+export class SessionMemory {
+  private readonly messages: SessionMessage[] = [];
+
+  add(message: SessionMessage) {
+    this.messages.push(message);
+  }
+
+  list() {
+    return [...this.messages];
+  }
+
+  getRecent(limit = 20) {
+    return this.messages.slice(-limit);
+  }
+}
