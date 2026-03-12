@@ -1,15 +1,8 @@
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import type { ToolRiskLevel } from "../types/tool.js";
+import type { ApprovalPayload, Approver } from "./types.js";
 
-export interface ApprovalPayload {
-  toolName: string;
-  reason: string;
-  riskLevel: ToolRiskLevel;
-  preview?: unknown;
-}
-
-export class CliApprover {
+export class CliApprover implements Approver {
   async requestApproval(payload: ApprovalPayload): Promise<boolean> {
     console.log("\n=== Approval Required ===");
     console.log(`Tool: ${payload.toolName}`);

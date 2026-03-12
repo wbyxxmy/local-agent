@@ -5,8 +5,14 @@ import { EventBus } from "./core/event-bus.js";
 import { registerBuiltinTools } from "./tools/registry.js";
 import { LocalAgent } from "./core/agent.js";
 import { Planner } from "./core/planner.js";
+import { CliApprover } from "./approval/cli-approver.js";
+import type { Approver } from "./approval/types.js";
 
-export function createApp() {
+interface CreateAppOptions {
+  approver?: Approver;
+}
+
+export function createApp(options: CreateAppOptions = {}) {
   const config = loadConfig();
   const policy = createDefaultPolicy(config.workspaceRoot);
   const registry = new ToolRegistry();
@@ -21,11 +27,14 @@ export function createApp() {
     (event) => eventBus.emit(event)
   );
 
+  const approver = options.approver ?? new CliApprover();
+
   const agent = new LocalAgent(
     registry,
     config.workspaceRoot,
     eventBus,
-    planner
+    planner,
+    approver
   );
 
   return {

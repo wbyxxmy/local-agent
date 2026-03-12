@@ -7,19 +7,19 @@ import type { ToolContext } from "../types/tool.js";
 import type { ToolRegistry } from "./registry.js";
 import type { PlanStep, PlannerObservation } from "./planner.js";
 import { EventBus } from "./event-bus.js";
-import { CliApprover } from "../approval/cli-approver.js";
+import type { Approver } from "../approval/types.js";
 
 export class LocalAgent {
   private readonly executor: ToolExecutor;
   private readonly router = new ToolRouter();
   private readonly memory = new SessionMemory();
-  private readonly approver = new CliApprover();
 
   constructor(
     private readonly registry: ToolRegistry,
     private readonly workspaceRoot: string,
     private readonly eventBus: EventBus,
-    private readonly planner: Planner
+    private readonly planner: Planner,
+    private readonly approver: Approver
   ) {
     this.executor = new ToolExecutor(registry);
   }
@@ -61,7 +61,8 @@ export class LocalAgent {
     const ctx: ToolContext = {
       sessionId,
       workspaceRoot: this.workspaceRoot,
-      requestApproval: async (payload) => this.approver.requestApproval(payload),
+      requestApproval: async (payload) =>
+        this.approver.requestApproval({ ...payload, sessionId }),
       emitEvent: (event) => this.eventBus.emit(event)
     };
 

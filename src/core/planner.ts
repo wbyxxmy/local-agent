@@ -249,8 +249,8 @@ export class Planner {
         "For each turn, decide either tool_call or answer.",
         "If enough information is gathered, choose answer with concise content.",
         "If a tool is needed, choose exactly one skill from candidate_skills.",
-        "Do not output tool input payload.",
-        "Return only JSON: {\"kind\":\"tool_call\"|\"answer\",\"skill\":string,\"content\":string}",
+        "When kind=tool_call, include minimal input object if inferable from user text.",
+        "Return only JSON: {\"kind\":\"tool_call\"|\"answer\",\"skill\":string,\"content\":string,\"input\":object}",
         `budget_mode=${budgetMode}`,
         `turn=${request.turn}`,
         `max_turns=${this.config.maxPlanningTurns}`,
@@ -258,7 +258,8 @@ export class Planner {
           candidateSkills.map((s) => ({
             name: s.name,
             toolName: s.toolName,
-            description: s.description
+            description: s.description,
+            inputHint: this.getInputHint(s.toolName)
           }))
         )}`,
         `user_input=${JSON.stringify(clipped)}`
@@ -367,6 +368,30 @@ export class Planner {
   private createPlanByRules(userInput: string): Plan {
     const text = userInput.trim();
 
+    const writeMatch = text.match(/^write\s+(.+?)\s+<<<\s*([\s\S]+)$/i);
+    if (writeMatch || /(?:写入|保存).*(?:内容|为)|把\s+.+\s+写入\s+.+|(?:打开|新建).*(?:记事本|笔记).*(?:写入|记录)/.test(text)) {
+      const selected = this.skills.find((item) => item.name === "write_file");
+      return {
+        steps: [
+          {
+            id: "step_1",
+            kind: "tool_call",
+            content: "Write file content",
+            toolName: "write_file",
+            input: buildSkillInput(
+              selected ?? {
+                name: "write_file",
+                description: "Write file",
+                toolName: "write_file",
+                keywords: []
+              },
+              text
+            )
+          }
+        ]
+      };
+    }
+
     if (
       /^list files$/i.test(text) ||
       text.includes("列出文件") ||
@@ -402,30 +427,6 @@ export class Planner {
                 name: "read_file",
                 description: "Read one text file",
                 toolName: "read_file",
-                keywords: []
-              },
-              text
-            )
-          }
-        ]
-      };
-    }
-
-    const writeMatch = text.match(/^write\s+(.+?)\s+<<<\s*([\s\S]+)$/i);
-    if (writeMatch || /(?:写入|保存).*(?:内容|为)|把\s+.+\s+写入\s+.+/.test(text)) {
-      const selected = this.skills.find((item) => item.name === "write_file");
-      return {
-        steps: [
-          {
-            id: "step_1",
-            kind: "tool_call",
-            content: "Write file content",
-            toolName: "write_file",
-            input: buildSkillInput(
-              selected ?? {
-                name: "write_file",
-                description: "Write file",
-                toolName: "write_file",
                 keywords: []
               },
               text
@@ -528,6 +529,25 @@ export class Planner {
         }
       ]
     };
+  }
+
+  private getInputHint(toolName: string) {
+    switch (toolName) {
+      case "list_files":
+        return "{ pattern?: string, limit?: number }";
+      case "read_file":
+        return "{ path: string }";
+      case "write_file":
+        return "{ path: string, content: string, createDirectories?: boolean }";
+      case "grep_code":
+        return "{ query: string, path?: string }";
+      case "run_command":
+        return "{ command: string }";
+      case "git_status":
+        return "{}";
+      default:
+        return "{}";
+    }
   }
 
   private sumObservationChars(observations: PlannerObservation[]) {

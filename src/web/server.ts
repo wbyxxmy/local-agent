@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createApp } from "../app.js";
 import { LocalModelClient } from "../llm/local-model.js";
 import type { ToolEvent } from "../types/tool.js";
+import { WebApprover } from "../approval/web-approver.js";
 
 interface RunRequestBody {
   input?: unknown;
@@ -16,7 +17,8 @@ interface ChatRequestBody {
   history?: unknown;
 }
 
-const app = createApp();
+const webApprover = new WebApprover();
+const app = createApp({ approver: webApprover });
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const pagePath = path.resolve(__dirname, "./index.html");
@@ -31,8 +33,10 @@ const chatModel = app.config.planner.localModelEnabled
 
 const server = createServer(async (req, res) => {
   const { method = "GET", url = "/" } = req;
+  const parsedUrl = new URL(url, `http://127.0.0.1:${port}`);
+  const pathname = parsedUrl.pathname;
 
-  if (method === "GET" && url === "/") {
+  if (method === "GET" && pathname === "/") {
     const html = await fs.readFile(pagePath, "utf8");
     res.writeHead(200, {
       "content-type": "text/html; charset=utf-8"
@@ -41,7 +45,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (method === "POST" && url === "/api/run") {
+  if (method === "POST" && pathname === "/api/run") {
     try {
       const chunks: Buffer[] = [];
       for await (const chunk of req) {
@@ -91,7 +95,57 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (method === "POST" && url === "/api/chat") {
+  if (method === "GET" && pathname === "/api/approvals") {
+    const sessionId = parsedUrl.searchParams.get("sessionId") || undefined;
+    res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        pending: webApprover.listPending(sessionId)
+      })
+    );
+    return;
+  }
+
+  if (method === "POST" && pathname.startsWith("/api/approvals/")) {
+    try {
+      const approvalId = decodeURIComponent(pathname.slice("/api/approvals/".length));
+      if (!approvalId) {
+        res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ok: false, error: "approval id is required" }));
+        return;
+      }
+
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) {
+        chunks.push(Buffer.from(chunk));
+      }
+
+      const rawBody = Buffer.concat(chunks).toString("utf8");
+      const body = (JSON.parse(rawBody || "{}") as { approved?: unknown }) ?? {};
+      const approved = body.approved === true;
+      const resolved = webApprover.resolveApproval(approvalId, approved);
+      if (!resolved) {
+        res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ok: false, error: "approval not found" }));
+        return;
+      }
+
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ ok: true, approved }));
+    } catch (error) {
+      res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
+      res.end(
+        JSON.stringify({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      );
+    }
+    return;
+  }
+
+  if (method === "POST" && pathname === "/api/chat") {
     try {
       const chunks: Buffer[] = [];
       for await (const chunk of req) {
@@ -116,8 +170,13 @@ const server = createServer(async (req, res) => {
 
       app.eventBus.on("*", listener);
       let result: unknown;
+      let sessionId = "";
       try {
         result = await app.agent.run(message);
+        sessionId =
+          result && typeof result === "object" && typeof (result as { sessionId?: unknown }).sessionId === "string"
+            ? ((result as { sessionId: string }).sessionId)
+            : "";
       } finally {
         app.eventBus.off("*", listener);
       }
@@ -134,6 +193,7 @@ const server = createServer(async (req, res) => {
             ok: true,
             mode: "tool",
             message: buildToolMessage(result),
+            sessionId,
             events,
             result
           })
@@ -149,6 +209,7 @@ const server = createServer(async (req, res) => {
             ok: true,
             mode: "chat",
             message: chatReply,
+            sessionId,
             events,
             result
           })
@@ -163,6 +224,7 @@ const server = createServer(async (req, res) => {
           ok: true,
           mode: "fallback",
           message: simpleReply,
+          sessionId,
           events,
           result
         })

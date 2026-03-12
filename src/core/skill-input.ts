@@ -5,6 +5,7 @@ export function buildSkillInput(
   userInput: string
 ): Record<string, unknown> {
   const text = userInput.trim();
+  const normalized = text.replace(/\s+/g, " ").trim();
   const templateType =
     skill.inputTemplate?.type ?? inferTemplateTypeFromToolName(skill.toolName);
   const defaults = skill.inputTemplate?.defaults ?? {};
@@ -32,9 +33,23 @@ export function buildSkillInput(
     }
 
     case "write_heredoc": {
+      const noteMatch =
+        normalized.match(
+          /(?:打开|新建)(?:\s*)(?:记事本|笔记|note)(?:\s*)(?:并|后)?(?:\s*)(?:写入|记录|写下)\s+([\s\S]+)$/i
+        ) ||
+        normalized.match(/(?:写在|记在)(?:\s*)(?:记事本|笔记|note)(?:\s*)(?:里|中)?\s+([\s\S]+)$/i);
+      if (noteMatch?.[1]) {
+        return {
+          ...defaults,
+          path: "tmp/note.txt",
+          content: noteMatch[1].trim()
+        };
+      }
+
       const match =
         text.match(/^write\s+(.+?)\s+<<<\s*([\s\S]+)$/i) ||
-        text.match(/(?:写入|保存)\s+(.+?)\s*(?:内容|为)\s*[:：]?\s*([\s\S]+)$/);
+        text.match(/(?:写入|保存)\s+(.+?)\s*(?:内容|为)\s*[:：]?\s*([\s\S]+)$/) ||
+        text.match(/(?:在|向)\s+(.+?)(?:\s+里|\s+中)?\s*(?:写入|保存)\s*[:：]?\s*([\s\S]+)$/);
       if (!match) {
         const cnAlt = text.match(/把\s+([\s\S]+?)\s+写入\s+(.+)$/);
         if (!cnAlt) return { ...defaults };

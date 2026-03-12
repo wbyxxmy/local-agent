@@ -260,6 +260,50 @@
         margin-top: 8px;
       }
 
+      .approvals {
+        margin-top: 10px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .approval-card {
+        border: 1px solid #f0c98b;
+        border-radius: 10px;
+        background: #fff7e8;
+        padding: 10px;
+      }
+
+      .approval-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #8a5808;
+      }
+
+      .approval-meta {
+        margin-top: 4px;
+        font-size: 12px;
+        color: #6f5d3f;
+        line-height: 1.4;
+      }
+
+      .approval-buttons {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .approve {
+        background: #0f766e;
+        color: #fff;
+        border-color: #0d6f68;
+      }
+
+      .reject {
+        background: #fff;
+        color: #8e3f1f;
+        border-color: #e5b8a8;
+      }
+
       @keyframes fadeIn {
         from { opacity: 0; transform: translateY(6px); }
         to { opacity: 1; transform: translateY(0); }
@@ -308,6 +352,7 @@
             <button class="ghost" id="clearBtn">清空会话</button>
           </div>
           <div class="status" id="status">就绪</div>
+          <div class="approvals" id="approvals"></div>
         </section>
       </section>
     </main>
@@ -318,7 +363,10 @@
       const runBtn = document.getElementById("runBtn");
       const clearBtn = document.getElementById("clearBtn");
       const messages = document.getElementById("messages");
+      const approvals = document.getElementById("approvals");
       const chatHistory = [];
+      let approvalPoller = null;
+      let currentSessionId = "";
 
       function addBubble(role, text, options = {}) {
         const { raw = null, withActions = false, retryText = "", typing = false } = options;
@@ -506,6 +554,122 @@
           .replaceAll(">", "&gt;");
       }
 
+      async function fetchPendingApprovals() {
+        const qs = currentSessionId
+          ? `?sessionId=${encodeURIComponent(currentSessionId)}`
+          : "";
+        const res = await fetch(`/api/approvals${qs}`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return Array.isArray(data?.pending) ? data.pending : [];
+      }
+
+      async function resolveApproval(id, approved) {
+        const res = await fetch(`/api/approvals/${encodeURIComponent(id)}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ approved })
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.error || "审批操作失败");
+        }
+      }
+
+      function renderApprovals(pending) {
+        approvals.innerHTML = "";
+        if (!Array.isArray(pending) || pending.length === 0) return;
+
+        for (const item of pending) {
+          const card = document.createElement("div");
+          card.className = "approval-card";
+
+          const title = document.createElement("div");
+          title.className = "approval-title";
+          title.textContent = `待审批: ${item.toolName}`;
+
+          const meta = document.createElement("div");
+          meta.className = "approval-meta";
+          meta.textContent = `风险: ${item.riskLevel} | 原因: ${item.reason}`;
+
+          card.appendChild(title);
+          card.appendChild(meta);
+
+          if (item.preview !== undefined) {
+            const pre = document.createElement("pre");
+            pre.textContent = JSON.stringify(item.preview, null, 2);
+            card.appendChild(pre);
+          }
+
+          const btns = document.createElement("div");
+          btns.className = "approval-buttons";
+
+          const approveBtn = document.createElement("button");
+          approveBtn.className = "approve";
+          approveBtn.textContent = "通过";
+          approveBtn.addEventListener("click", async () => {
+            approveBtn.disabled = true;
+            rejectBtn.disabled = true;
+            try {
+              await resolveApproval(item.id, true);
+              status.textContent = "已通过审批，继续执行...";
+              await pollApprovalsOnce();
+            } catch (err) {
+              status.textContent = `审批失败: ${err instanceof Error ? err.message : String(err)}`;
+              approveBtn.disabled = false;
+              rejectBtn.disabled = false;
+            }
+          });
+
+          const rejectBtn = document.createElement("button");
+          rejectBtn.className = "reject";
+          rejectBtn.textContent = "拒绝";
+          rejectBtn.addEventListener("click", async () => {
+            approveBtn.disabled = true;
+            rejectBtn.disabled = true;
+            try {
+              await resolveApproval(item.id, false);
+              status.textContent = "已拒绝审批";
+              await pollApprovalsOnce();
+            } catch (err) {
+              status.textContent = `审批失败: ${err instanceof Error ? err.message : String(err)}`;
+              approveBtn.disabled = false;
+              rejectBtn.disabled = false;
+            }
+          });
+
+          btns.appendChild(approveBtn);
+          btns.appendChild(rejectBtn);
+          card.appendChild(btns);
+          approvals.appendChild(card);
+        }
+      }
+
+      async function pollApprovalsOnce() {
+        try {
+          const pending = await fetchPendingApprovals();
+          renderApprovals(pending);
+          if (pending.length > 0) {
+            status.textContent = "等待审批...";
+          }
+        } catch {
+          // Ignore transient polling errors.
+        }
+      }
+
+      function startApprovalPolling() {
+        if (approvalPoller) return;
+        pollApprovalsOnce();
+        approvalPoller = setInterval(pollApprovalsOnce, 700);
+      }
+
+      function stopApprovalPolling() {
+        if (!approvalPoller) return;
+        clearInterval(approvalPoller);
+        approvalPoller = null;
+        approvals.innerHTML = "";
+      }
+
       async function runCommand(overrideText = "", keepInput = false) {
         const candidate = typeof overrideText === "string" ? overrideText : "";
         const text = (candidate || input.value).trim();
@@ -519,6 +683,7 @@
         if (!keepInput) input.value = "";
         runBtn.disabled = true;
         status.textContent = "执行中...";
+        startApprovalPolling();
 
         const pending = addBubble("assistant", "正在调用 Agent...");
 
@@ -532,6 +697,9 @@
             })
           });
           const data = await res.json();
+          if (typeof data?.sessionId === "string") {
+            currentSessionId = data.sessionId;
+          }
 
           const summary =
             typeof data?.message === "string"
@@ -563,6 +731,7 @@
           status.textContent = "请求失败";
         } finally {
           runBtn.disabled = false;
+          stopApprovalPolling();
           input.focus();
         }
       }
@@ -579,6 +748,8 @@
       clearBtn.addEventListener("click", () => {
         messages.innerHTML = "";
         chatHistory.length = 0;
+        currentSessionId = "";
+        approvals.innerHTML = "";
         status.textContent = "会话已清空";
       });
 
