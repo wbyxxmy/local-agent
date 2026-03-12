@@ -12,4 +12,8 @@ export class EventBus {
   on(type: string, listener: (event: ToolEvent) => void) {
     this.emitter.on(type, listener);
   }
+
+  off(type: string, listener: (event: ToolEvent) => void) {
+    this.emitter.off(type, listener);
+  }
 }

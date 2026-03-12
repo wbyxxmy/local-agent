@@ -34,6 +34,31 @@ npm run dev -- "搜索 PlannerConfig"
 npm run dev -- "执行 git status"
 ```
 
+### Web UI
+
+```bash
+npm run web
+```
+
+Then open:
+
+- `http://localhost:4173`
+
+Optional custom port:
+
+```bash
+PORT=5001 npm run web
+```
+
+For natural conversation in Web UI (non-command chat), enable local model:
+
+```bash
+export LOCAL_MODEL_ENABLED=true
+export LOCAL_MODEL_BASE_URL=http://127.0.0.1:11434
+export LOCAL_MODEL_NAME=qwen2.5:7b
+npm run web
+```
+
 ## Write file example
 
 ```bash
