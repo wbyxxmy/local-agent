@@ -1,0 +1,12 @@
+{
+  "name": "list_files_fast",
+  "description": "List files quickly with a smaller default limit",
+  "toolName": "list_files",
+  "keywords": ["list", "files", "quick", "fast", "列出", "快速"],
+  "inputTemplate": {
+    "type": "list_pattern",
+    "defaults": {
+      "limit": 20
+    }
+  }
+}

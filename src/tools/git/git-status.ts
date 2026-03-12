@@ -1,4 +1,4 @@
-import simpleGit from "simple-git";
+import { simpleGit } from "simple-git";
 import { z } from "zod";
 import type { ToolDefinition } from "../../types/tool.js";
 

@@ -13,7 +13,7 @@ export async function execCommand(
   });
 
   return {
-    exitCode: result.exitCode,
+    exitCode: result.exitCode ?? 1,
     stdout: result.stdout,
     stderr: result.stderr
   };

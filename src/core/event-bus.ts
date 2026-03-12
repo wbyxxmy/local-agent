@@ -1,4 +1,4 @@
-import EventEmitter from "eventemitter3";
+import { EventEmitter } from "node:events";
 import type { ToolEvent } from "../types/tool.js";
 
 export class EventBus {

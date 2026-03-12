@@ -33,7 +33,7 @@ export interface ToolDefinition<TInput = unknown, TOutput = unknown> {
   name: string;
   description: string;
   riskLevel: ToolRiskLevel;
-  inputSchema: z.ZodType<TInput>;
+  inputSchema: z.ZodType<TInput, z.ZodTypeDef, unknown>;
   requiresConfirmation?: boolean;
   run: (input: TInput, ctx: ToolContext) => Promise<ToolResult<TOutput>>;
 }

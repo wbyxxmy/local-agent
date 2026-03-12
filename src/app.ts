@@ -4,6 +4,7 @@ import { ToolRegistry } from "./core/registry.js";
 import { EventBus } from "./core/event-bus.js";
 import { registerBuiltinTools } from "./tools/registry.js";
 import { LocalAgent } from "./core/agent.js";
+import { Planner } from "./core/planner.js";
 
 export function createApp() {
   const config = loadConfig();
@@ -13,7 +14,19 @@ export function createApp() {
 
   registerBuiltinTools(registry, policy);
 
-  const agent = new LocalAgent(registry, config.workspaceRoot, eventBus);
+  const planner = new Planner(
+    config.planner,
+    config.workspaceRoot,
+    new Set(registry.list().map((tool) => tool.name)),
+    (event) => eventBus.emit(event)
+  );
+
+  const agent = new LocalAgent(
+    registry,
+    config.workspaceRoot,
+    eventBus,
+    planner
+  );
 
   return {
     config,
