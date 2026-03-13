@@ -180,6 +180,41 @@ Example manifest: [examples/skills/example-skill.json](examples/skills/example-s
 - `grep <text>`
 - `git status`
 - `run <command>`
+- `open wechat`
+- `打开微信，给张三打个招呼`
+
+### App Catalog (optional)
+
+You can add or override app launch mappings in `.local-agent/apps.json`.
+
+Schema:
+
+```json
+{
+	"app_id": {
+		"aliases": ["alias1", "alias2"],
+		"launchers": {
+			"linux": ["launcher command"],
+			"darwin": ["launcher command"],
+			"win32": ["launcher command"]
+		}
+	}
+}
+```
+
+Example: [examples/apps/apps.example.json](examples/apps/apps.example.json)
+
+Web API for app launcher health:
+
+- `GET /api/apps/status`
+- `GET /api/apps/status?sessionId=<id>` (session-scoped cache)
+- `GET /api/apps/status?refresh=1` (force refresh, bypass cache)
+
+Each launcher row includes:
+
+- `available`: whether launcher command is available in current environment
+- `resolvedPath`: resolved executable path when available
+- `repairCommand`: copyable shell command suggestion when unavailable
 
 ## Next steps
 

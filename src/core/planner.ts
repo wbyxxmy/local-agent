@@ -386,6 +386,30 @@ export class Planner {
   ): Plan {
     const text = userInput.trim();
 
+    const shouldOpenApp = this.isLikelyOpenAppIntent(text);
+    if (shouldOpenApp) {
+      const selected = this.skills.find((item) => item.name === "open_app");
+      return {
+        steps: [
+          {
+            id: "step_1",
+            kind: "tool_call",
+            content: "Open local app",
+            toolName: "open_app",
+            input: buildSkillInput(
+              selected ?? {
+                name: "open_app",
+                description: "Open local app",
+                toolName: "open_app",
+                keywords: []
+              },
+              text
+            )
+          }
+        ]
+      };
+    }
+
     const writeMatch = text.match(/^write\s+(.+?)\s+<<<\s*([\s\S]+)$/i);
     if (writeMatch || /(?:写入|保存).*(?:内容|为)|把\s+.+\s+写入\s+.+|(?:打开|新建).*(?:记事本|笔记).*(?:写入|记录)/.test(text)) {
       const selected = this.skills.find((item) => item.name === "write_file");
@@ -431,7 +455,9 @@ export class Planner {
     }
 
     const readMatch = text.match(/^read\s+(.+)$/i);
-    if (readMatch || /^(?:读取|打开|查看)\s+/.test(text)) {
+    const shouldReadByChineseVerb =
+      /^(?:读取|打开|查看)\s+/.test(text) && this.isLikelyFileReference(text);
+    if (readMatch || shouldReadByChineseVerb) {
       const selected = this.skills.find((item) => item.name === "read_file");
       return {
         steps: [
@@ -568,6 +594,8 @@ export class Planner {
         return "{ query: string, path?: string }";
       case "run_command":
         return "{ command: string }";
+      case "open_app":
+        return "{ app: string, contact?: string, message?: string, action?: string }";
       case "git_status":
         return "{}";
       default:
@@ -637,6 +665,7 @@ export class Planner {
 
   private isActionableCommand(text: string) {
     return (
+      this.isLikelyOpenAppIntent(text) ||
       /^write\s+.+\s+<<<\s*[\s\S]+$/i.test(text) ||
       /(?:写入|保存).*(?:内容|为)|把\s+.+\s+写入\s+.+|(?:打开|新建).*(?:记事本|笔记).*(?:写入|记录)/.test(text) ||
       /^list files$/i.test(text) ||
@@ -652,6 +681,36 @@ export class Planner {
       /^git\s*状态$/.test(text) ||
       text === "查看git状态"
     );
+  }
+
+  private isLikelyOpenAppIntent(text: string) {
+    const normalized = text.trim();
+    if (!normalized) return false;
+
+    const openVerb = /^(?:open|launch|start|打开|启动)\s+/i.test(normalized);
+    if (!openVerb) return false;
+    if (this.isLikelyFileReference(normalized)) return false;
+
+    return true;
+  }
+
+  private isLikelyFileReference(text: string) {
+    const normalized = text.trim();
+
+    if (/\b(?:readme|package\.json|tsconfig\.json)\b/i.test(normalized)) {
+      return true;
+    }
+    if (/\.[a-z0-9]{1,6}(?:\s|$)/i.test(normalized)) {
+      return true;
+    }
+    if (/[\\/]/.test(normalized)) {
+      return true;
+    }
+    if (/(?:文件|目录|路径|path)/i.test(normalized)) {
+      return true;
+    }
+
+    return false;
   }
 
   private hasSkillKeywordHit(text: string) {

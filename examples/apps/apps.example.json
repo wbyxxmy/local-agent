@@ -1,0 +1,28 @@
+{
+  "wechat": {
+    "aliases": ["wechat", "微信", "weixin"],
+    "launchers": {
+      "linux": [
+        "xdg-open weixin://",
+        "wechat",
+        "flatpak run com.tencent.WeChat"
+      ],
+      "darwin": [
+        "open -a WeChat",
+        "open weixin://"
+      ],
+      "win32": [
+        "start weixin://",
+        "start WeChat"
+      ]
+    }
+  },
+  "feishu": {
+    "aliases": ["飞书", "feishu", "lark"],
+    "launchers": {
+      "linux": ["feishu"],
+      "darwin": ["open -a Feishu"],
+      "win32": ["start Feishu"]
+    }
+  }
+}

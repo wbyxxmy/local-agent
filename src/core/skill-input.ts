@@ -85,6 +85,28 @@ export function buildSkillInput(
       return command ? { ...defaults, command } : { ...defaults };
     }
 
+    case "open_app": {
+      const openMatch = normalized.match(
+        /(?:(?:open|launch|start)\s+|(?:打开|启动)\s*)([^，,\s]+(?:\s+[^，,\s]+)?)/i
+      );
+      const app = openMatch?.[1] ? trimQuotes(openMatch[1].trim()) : "";
+
+      const greetMatch =
+        normalized.match(/给\s*([a-zA-Z0-9_\-\u4e00-\u9fa5]+)\s*(?:打个招呼|发个消息|发消息|问好)\s*(.*)$/i) ||
+        normalized.match(/(?:向|给)\s*([a-zA-Z0-9_\-\u4e00-\u9fa5]+)\s*说\s*([\s\S]+)$/i);
+
+      const contact = greetMatch?.[1]?.trim();
+      const message = greetMatch?.[2]?.trim() || (greetMatch ? "你好" : undefined);
+
+      if (!app) return { ...defaults };
+      return {
+        ...defaults,
+        app,
+        ...(contact ? { contact } : {}),
+        ...(message ? { message } : {})
+      };
+    }
+
     case "empty":
       return { ...defaults };
 
@@ -103,6 +125,7 @@ function inferTemplateTypeFromToolName(skillToolName: string):
   | "write_heredoc"
   | "grep_query"
   | "run_command"
+  | "open_app"
   | "empty" {
   switch (skillToolName) {
     case "list_files":
@@ -115,6 +138,8 @@ function inferTemplateTypeFromToolName(skillToolName: string):
       return "grep_query";
     case "run_command":
       return "run_command";
+    case "open_app":
+      return "open_app";
     default:
       return "empty";
   }

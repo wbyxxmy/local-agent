@@ -13,6 +13,7 @@ export class ToolRouter {
       if ((text.includes("list") || text.includes("列出")) && tool.name === "list_files") score += 3;
       if (text.includes("git") && tool.name.startsWith("git_")) score += 3;
       if ((text.includes("command") || text.includes("shell") || text.includes("执行") || text.includes("run ")) && tool.name === "run_command") score += 3;
+      if ((/^\s*(open|launch|start|打开|启动)\b/.test(text) || text.startsWith("打开") || text.startsWith("启动")) && tool.name === "open_app") score += 4;
 
       if (score === 0 && ["read_file", "list_files", "grep_code"].includes(tool.name)) {
         score += 1;

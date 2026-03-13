@@ -6,6 +6,7 @@ import { listFilesTool } from "./file/list-files.js";
 import { grepTool } from "./code/grep.js";
 import { createRunCommandTool } from "./shell/run-command.js";
 import { gitStatusTool } from "./git/git-status.js";
+import { openAppTool } from "./system/open-app.js";
 
 export function registerBuiltinTools(
   registry: ToolRegistry,
@@ -17,4 +18,5 @@ export function registerBuiltinTools(
   registry.register(grepTool);
   registry.register(createRunCommandTool(policy));
   registry.register(gitStatusTool);
+  registry.register(openAppTool);
 }

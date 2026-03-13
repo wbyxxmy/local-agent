@@ -123,6 +123,86 @@
         margin-bottom: 10px;
       }
 
+      .app-health {
+        margin-bottom: 10px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff9ef;
+        padding: 10px;
+      }
+
+      .app-health-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 12px;
+        color: #6b5d46;
+      }
+
+      .app-health-list {
+        margin-top: 8px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .app-health-row {
+        border: 1px solid #e8dcc8;
+        border-radius: 8px;
+        background: #fff;
+        padding: 8px;
+      }
+
+      .app-health-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #5f4e2f;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .app-grade {
+        font-size: 10px;
+        border: 1px solid #d8cfbe;
+        border-radius: 999px;
+        padding: 2px 7px;
+        background: #f8f3ea;
+      }
+
+      .app-grade.good {
+        color: #0f766e;
+        border-color: #95d6cb;
+        background: #e9f7f4;
+      }
+
+      .app-grade.medium {
+        color: #8a5808;
+        border-color: #f1d59d;
+        background: #fff5e0;
+      }
+
+      .app-grade.bad {
+        color: #8e3f1f;
+        border-color: #e5b8a8;
+        background: #fff1ec;
+      }
+
+      .app-health-item {
+        margin-top: 4px;
+        font-size: 11px;
+        color: #6a6a6a;
+      }
+
+      .app-ok {
+        color: #0f766e;
+      }
+
+      .app-bad {
+        color: #8e3f1f;
+      }
+
       button {
         border: 1px solid transparent;
         border-radius: 10px;
@@ -408,11 +488,20 @@
         <section class="messages" id="messages"></section>
 
         <section class="composer">
+          <div class="app-health" id="appHealth">
+            <div class="app-health-head">
+              <span id="appHealthMeta">应用启动器状态加载中...</span>
+              <button class="action-btn" id="refreshAppsBtn">刷新状态</button>
+            </div>
+            <div class="app-health-list" id="appHealthList"></div>
+          </div>
+
           <div class="chips">
             <button class="chip" data-sample="list files">list files</button>
             <button class="chip" data-sample="read README.md">read README.md</button>
             <button class="chip" data-sample="搜索 PlannerConfig">搜索 PlannerConfig</button>
             <button class="chip" data-sample="git status">git status</button>
+            <button class="chip" data-sample="打开微信">打开微信</button>
           </div>
 
           <div class="row">
@@ -450,6 +539,9 @@
       const approvalModalList = document.getElementById("approvalModalList");
       const approvalPanelSub = document.getElementById("approvalPanelSub");
       const approvalCloseBtn = document.getElementById("approvalCloseBtn");
+      const appHealthMeta = document.getElementById("appHealthMeta");
+      const appHealthList = document.getElementById("appHealthList");
+      const refreshAppsBtn = document.getElementById("refreshAppsBtn");
       const chatHistory = [];
       let approvalPoller = null;
       let currentSessionId = "";
@@ -640,6 +732,111 @@
           .replaceAll("&", "&amp;")
           .replaceAll("<", "&lt;")
           .replaceAll(">", "&gt;");
+      }
+
+      function renderAppHealth(data) {
+        appHealthList.innerHTML = "";
+
+        if (!data?.ok) {
+          appHealthMeta.textContent = `应用状态加载失败: ${data?.error || "unknown"}`;
+          return;
+        }
+
+        const apps = Array.isArray(data.apps) ? data.apps : [];
+        const availableCount = apps.reduce((sum, app) => {
+          const launchers = Array.isArray(app.launchers) ? app.launchers : [];
+          return sum + launchers.filter((item) => item.available === true).length;
+        }, 0);
+
+        appHealthMeta.textContent = `平台: ${data.platform} | 应用: ${apps.length} | 可用启动器: ${availableCount} | ${data.cached ? "缓存" : "实时"}`;
+
+        const sortedApps = [...apps]
+          .map((app) => {
+            const launchers = Array.isArray(app.launchers) ? app.launchers : [];
+            const available = launchers.filter((item) => item.available === true).length;
+            const total = launchers.length;
+            const ratio = total > 0 ? available / total : 0;
+            return { app, launchers, available, total, ratio };
+          })
+          .sort((a, b) => b.ratio - a.ratio || b.available - a.available || a.app.appId.localeCompare(b.app.appId));
+
+        for (const entry of sortedApps) {
+          const { app, launchers, available, total, ratio } = entry;
+          const row = document.createElement("div");
+          row.className = "app-health-row";
+
+          const title = document.createElement("div");
+          title.className = "app-health-title";
+          const aliases = Array.isArray(app.aliases) ? app.aliases.join(", ") : "";
+
+          const label = document.createElement("span");
+          label.textContent = `${app.appId}${aliases ? ` (${aliases})` : ""}`;
+
+          const badge = document.createElement("span");
+          badge.className = "app-grade";
+          if (ratio >= 0.8) badge.classList.add("good");
+          else if (ratio >= 0.34) badge.classList.add("medium");
+          else badge.classList.add("bad");
+          badge.textContent = `可用率 ${available}/${total}`;
+
+          title.appendChild(label);
+          title.appendChild(badge);
+          row.appendChild(title);
+
+          if (launchers.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "app-health-item app-bad";
+            empty.textContent = "当前平台无启动器配置";
+            row.appendChild(empty);
+          }
+
+          for (const launcher of launchers) {
+            const item = document.createElement("div");
+            item.className = `app-health-item ${launcher.available ? "app-ok" : "app-bad"}`;
+            const resolved = launcher.resolvedPath ? ` | 路径: ${launcher.resolvedPath}` : "";
+            item.textContent = `${launcher.available ? "可用" : "不可用"} | ${launcher.launcher} | ${launcher.detail}${resolved}`;
+            row.appendChild(item);
+
+            if (!launcher.available && launcher.repairCommand) {
+              const fix = document.createElement("button");
+              fix.className = "action-btn";
+              fix.textContent = `复制修复命令: ${launcher.repairCommand}`;
+              fix.addEventListener("click", async () => {
+                try {
+                  await navigator.clipboard.writeText(launcher.repairCommand);
+                  fix.textContent = "已复制修复命令";
+                  setTimeout(() => {
+                    fix.textContent = `复制修复命令: ${launcher.repairCommand}`;
+                  }, 1000);
+                } catch {
+                  fix.textContent = "复制失败";
+                  setTimeout(() => {
+                    fix.textContent = `复制修复命令: ${launcher.repairCommand}`;
+                  }, 1000);
+                }
+              });
+              row.appendChild(fix);
+            }
+          }
+
+          appHealthList.appendChild(row);
+        }
+      }
+
+      async function refreshAppHealth(force = false) {
+        refreshAppsBtn.disabled = true;
+        try {
+          const qs = new URLSearchParams();
+          if (currentSessionId) qs.set("sessionId", currentSessionId);
+          if (force) qs.set("refresh", "1");
+          const res = await fetch(`/api/apps/status${qs.toString() ? `?${qs.toString()}` : ""}`);
+          const data = await res.json().catch(() => ({}));
+          renderAppHealth(data);
+        } catch (err) {
+          renderAppHealth({ ok: false, error: err instanceof Error ? err.message : String(err) });
+        } finally {
+          refreshAppsBtn.disabled = false;
+        }
       }
 
       async function fetchPendingApprovals() {
@@ -893,7 +1090,12 @@
         }
       });
 
+      refreshAppsBtn.addEventListener("click", () => {
+        refreshAppHealth(true);
+      });
+
       startApprovalPolling();
+      refreshAppHealth();
 
       for (const el of document.querySelectorAll(".chip")) {
         el.addEventListener("click", () => {

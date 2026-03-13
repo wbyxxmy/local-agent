@@ -17,6 +17,7 @@ export interface SkillDefinition {
       | "write_heredoc"
       | "grep_query"
       | "run_command"
+      | "open_app"
       | "empty";
     defaults?: Record<string, unknown>;
   };
@@ -94,6 +95,17 @@ export const builtinSkills: SkillDefinition[] = [
     inputTemplate: {
       type: "run_command"
     }
+  },
+  {
+    name: "open_app",
+    description: "Open a local app such as WeChat",
+    toolName: "open_app",
+    keywords: ["open", "app", "launch", "打开", "启动", "微信", "wechat"],
+    priority: 1,
+    enabled: true,
+    inputTemplate: {
+      type: "open_app"
+    }
   }
 ];
 
@@ -112,6 +124,7 @@ const skillManifestSchema = z.object({
         "write_heredoc",
         "grep_query",
         "run_command",
+        "open_app",
         "empty"
       ]),
       defaults: z.record(z.unknown()).optional()

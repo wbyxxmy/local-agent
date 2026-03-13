@@ -7,6 +7,7 @@ import { createApp } from "../app.js";
 import { LocalModelClient } from "../llm/local-model.js";
 import type { ToolEvent } from "../types/tool.js";
 import { WebApprover } from "../approval/web-approver.js";
+import { getAppLaunchStatus } from "../tools/system/open-app.js";
 
 interface RunRequestBody {
   input?: unknown;
@@ -110,6 +111,28 @@ const server = createServer(async (req, res) => {
         pending: webApprover.listPending(sessionId)
       })
     );
+    return;
+  }
+
+  if (method === "GET" && pathname === "/api/apps/status") {
+    try {
+      const forceRefresh = parsedUrl.searchParams.get("refresh") === "1";
+      const sessionId = parsedUrl.searchParams.get("sessionId") || "";
+      const status = await getAppLaunchStatus(app.config.workspaceRoot, {
+        forceRefresh,
+        cacheKey: sessionId || "global"
+      });
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ ok: true, ...status }));
+    } catch (error) {
+      res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
+      res.end(
+        JSON.stringify({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      );
+    }
     return;
   }
 
@@ -336,6 +359,17 @@ function buildToolMessage(result: unknown): string {
         const out = String(obj.stdout || obj.stderr || "").slice(0, 220);
         parts.push(`- 命令执行结束，退出码 ${obj.exitCode}。`);
         if (out) parts.push(`输出片段：${out}`);
+        continue;
+      }
+
+      if (typeof obj.app === "string" && typeof obj.launcher === "string") {
+        parts.push(`- 已尝试打开应用 ${obj.app}（方式：${obj.launcher}）。`);
+        if (typeof obj.actionHint === "string" && obj.actionHint) {
+          parts.push(`后续建议：${obj.actionHint}`);
+        }
+        if (typeof obj.note === "string" && obj.note) {
+          parts.push(obj.note);
+        }
         continue;
       }
     }
