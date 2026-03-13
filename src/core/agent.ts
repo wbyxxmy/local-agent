@@ -13,13 +13,17 @@ export class LocalAgent {
   private readonly executor: ToolExecutor;
   private readonly router = new ToolRouter();
   private readonly memories = new Map<string, SessionMemory>();
+  private readonly memoryTimestamps = new Map<string, number>();
+  private static readonly SESSION_TTL_MS = 30 * 60 * 1000;
 
   private getMemory(sessionId: string) {
+    this.evictExpiredSessions();
     let memory = this.memories.get(sessionId);
     if (!memory) {
       memory = new SessionMemory();
       this.memories.set(sessionId, memory);
     }
+    this.memoryTimestamps.set(sessionId, Date.now());
     return memory;
   }
 
@@ -220,11 +224,6 @@ export class LocalAgent {
             content: `${step.toolName}: ${summary}`,
             timestamp: Date.now()
           });
-          memory.add({
-            role: "assistant",
-            content: this.summarizeToolStep(step.toolName, result),
-            timestamp: Date.now()
-          });
           continue;
         }
 
@@ -338,5 +337,14 @@ export class LocalAgent {
       totalPlanningTokens: totalPromptTokens + totalObservationTokens,
       totalTurns: trace.length
     };
+  }
+  private evictExpiredSessions() {
+    const now = Date.now();
+    for (const [id, ts] of this.memoryTimestamps) {
+      if (now - ts > LocalAgent.SESSION_TTL_MS) {
+        this.memories.delete(id);
+        this.memoryTimestamps.delete(id);
+      }
+    }
   }
 }

@@ -108,6 +108,27 @@ export class Planner {
   async createPlan(request: PlannerRequest): Promise<Plan> {
     this.refreshSkillsIfNeeded();
 
+    // 第一轮优先走规则，命中直接返回，避免不必要的 LLM 调用
+    if (request.turn === 1 || !this.modelClient) {
+      const fromRules = this.createPlanByRules(
+        request.originalInput,
+        request.recentMessages ?? []
+      );
+      if (fromRules.steps[0]?.kind === "tool_call") {
+        return {
+          ...fromRules,
+          meta: {
+            mode: "rules",
+            promptChars: 0,
+            observationChars: this.sumObservationChars(request.observations),
+            promptTokens: 0,
+            observationTokens: this.sumObservationTokens(request.observations),
+            candidateSkillCount: 0
+          }
+        };
+      }
+    }
+
     const fromModel = await this.createPlanFromModel(request);
     if (fromModel) return fromModel;
 
@@ -239,7 +260,7 @@ export class Planner {
           .slice(-6)
           .map((item) => ({
             role: item.role,
-            content: item.content.slice(0, 220)
+            content: item.content.slice(0, 100)
           }))
       );
       const observationText = JSON.stringify(
@@ -252,7 +273,7 @@ export class Planner {
           }))
       );
       const candidateSkills = shortlistSkills(
-        `${clipped}\n${recentMessagesText}\n${observationText}`,
+        clipped,
         skillLimit,
         this.skills
       );
@@ -268,14 +289,8 @@ export class Planner {
         `turn=${request.turn}`,
         `max_turns=${this.config.maxPlanningTurns}`,
         `candidate_skills=${JSON.stringify(
-          candidateSkills.map((s) => ({
-            name: s.name,
-            toolName: s.toolName,
-            description: s.description,
-            inputHint: this.getInputHint(s.toolName)
-          }))
+          candidateSkills.map((s) => ({ name: s.name, toolName: s.toolName }))
         )}`,
-        `recent_messages=${recentMessagesText}`,
         `user_input=${JSON.stringify(clipped)}`,
         `recent_observations=${observationText}`
       ].join("\n");

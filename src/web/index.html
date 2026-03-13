@@ -52,6 +52,15 @@
         padding: 14px 16px;
         border-bottom: 1px solid var(--line);
         background: linear-gradient(180deg, #fffdf7 0%, #f8f2e6 100%);
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        position: relative;
+      }
+
+      .head-title {
+        flex: 1;
       }
 
       h1 {
@@ -124,11 +133,25 @@
       }
 
       .app-health {
-        margin-bottom: 10px;
+        position: absolute;
+        top: 100%;
+        right: 0;
+        z-index: 10;
+        width: min(480px, calc(100vw - 24px));
         border: 1px solid var(--line);
         border-radius: 10px;
         background: #fff9ef;
         padding: 10px;
+        box-shadow: 0 8px 24px rgba(61, 50, 34, 0.12);
+        display: none;
+      }
+
+      .app-health.open {
+        display: block;
+      }
+
+      .head {
+        position: relative;
       }
 
       .app-health-head {
@@ -481,13 +504,11 @@
     <main class="wrap">
       <section class="shell">
         <header class="head">
-          <h1>Local Agent Chat</h1>
-          <p class="sub">现在是聊天模式：默认展示可读回复，技术 JSON 放在详情里。</p>
-        </header>
-
-        <section class="messages" id="messages"></section>
-
-        <section class="composer">
+          <div class="head-title">
+            <h1>Local Agent Chat</h1>
+            <p class="sub">现在是聊天模式：默认展示可读回复，技术 JSON 放在详情里。</p>
+          </div>
+          <button class="action-btn" id="appHealthToggleBtn" style="white-space:nowrap;margin-top:4px">应用状态</button>
           <div class="app-health" id="appHealth">
             <div class="app-health-head">
               <span id="appHealthMeta">应用启动器状态加载中...</span>
@@ -495,7 +516,11 @@
             </div>
             <div class="app-health-list" id="appHealthList"></div>
           </div>
+        </header>
 
+        <section class="messages" id="messages"></section>
+
+        <section class="composer">
           <div class="chips">
             <button class="chip" data-sample="list files">list files</button>
             <button class="chip" data-sample="read README.md">read README.md</button>
@@ -542,6 +567,19 @@
       const appHealthMeta = document.getElementById("appHealthMeta");
       const appHealthList = document.getElementById("appHealthList");
       const refreshAppsBtn = document.getElementById("refreshAppsBtn");
+      const appHealthToggleBtn = document.getElementById("appHealthToggleBtn");
+      const appHealthPanel = document.getElementById("appHealth");
+
+      appHealthToggleBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        appHealthPanel.classList.toggle("open");
+      });
+
+      document.addEventListener("click", (e) => {
+        if (!appHealthPanel.contains(e.target) && e.target !== appHealthToggleBtn) {
+          appHealthPanel.classList.remove("open");
+        }
+      });
       const chatHistory = [];
       let approvalPoller = null;
       let currentSessionId = "";

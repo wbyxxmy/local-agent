@@ -6,9 +6,17 @@ export interface SessionMessage {
 
 export class SessionMemory {
   private readonly messages: SessionMessage[] = [];
+  private readonly maxMessages: number;
+
+  constructor(maxMessages = 50) {
+    this.maxMessages = maxMessages;
+  }
 
   add(message: SessionMessage) {
     this.messages.push(message);
+    if (this.messages.length > this.maxMessages) {
+      this.messages.shift();
+    }
   }
 
   list() {
