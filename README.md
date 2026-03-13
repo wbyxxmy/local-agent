@@ -32,6 +32,8 @@ npm run dev -- "run git status"
 npm run dev -- "读取 README.md"
 npm run dev -- "搜索 PlannerConfig"
 npm run dev -- "执行 git status"
+npm run dev -- "查当前热点"
+npm run dev -- "查当前热点 AI 24小时 新华网"
 ```
 
 ### Web UI
@@ -152,7 +154,7 @@ Manifest schema:
 	"priority": 10,
 	"enabled": true,
 	"inputTemplate": {
-		"type": "list_pattern | read_path | write_heredoc | grep_query | run_command | empty",
+		"type": "list_pattern | read_path | write_heredoc | grep_query | run_command | open_app | web_search | empty",
 		"defaults": {
 			"limit": 20
 		}
@@ -182,6 +184,9 @@ Example manifest: [examples/skills/example-skill.json](examples/skills/example-s
 - `run <command>`
 - `open wechat`
 - `打开微信，给张三打个招呼`
+- `查当前热点`
+- `查当前热点 AI 24小时 新华网`
+- `查当前热点 财经 7天 东方财富`
 
 ### App Catalog (optional)
 

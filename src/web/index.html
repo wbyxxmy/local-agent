@@ -132,6 +132,29 @@
         margin-bottom: 10px;
       }
 
+      .hot-topic-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+      }
+
+      .hot-topic-row label {
+        font-size: 12px;
+        color: #6b5d46;
+      }
+
+      .hot-topic-select {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 6px 10px;
+        background: #fff;
+        color: #3d423f;
+        font: inherit;
+        font-size: 12px;
+      }
+
       .app-health {
         position: absolute;
         top: 100%;
@@ -357,6 +380,38 @@
         background: #fff;
       }
 
+      .link-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 8px;
+      }
+
+      .link-list li {
+        border: 1px solid #e7dfd0;
+        border-radius: 8px;
+        padding: 8px;
+        background: #fff;
+      }
+
+      .link-title {
+        color: #0f766e;
+        font-size: 13px;
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .link-title:hover {
+        text-decoration: underline;
+      }
+
+      .link-meta {
+        margin-top: 4px;
+        font-size: 11px;
+        color: #6b7280;
+      }
+
       .status {
         font-size: 12px;
         color: var(--muted);
@@ -524,9 +579,37 @@
           <div class="chips">
             <button class="chip" data-sample="list files">list files</button>
             <button class="chip" data-sample="read README.md">read README.md</button>
-            <button class="chip" data-sample="搜索 PlannerConfig">搜索 PlannerConfig</button>
+            <button class="chip" data-sample="grep PlannerConfig">grep PlannerConfig</button>
+            <button class="chip" data-sample="查当前热点">查当前热点</button>
             <button class="chip" data-sample="git status">git status</button>
             <button class="chip" data-sample="打开微信">打开微信</button>
+          </div>
+
+          <div class="hot-topic-row">
+            <label for="hotTopicSelect">热点主题</label>
+            <select id="hotTopicSelect" class="hot-topic-select">
+              <option value="general">综合</option>
+              <option value="ai">AI</option>
+              <option value="tech">科技</option>
+              <option value="finance">财经</option>
+            </select>
+
+            <label for="hotSiteSelect">来源</label>
+            <select id="hotSiteSelect" class="hot-topic-select">
+              <option value="all">全部</option>
+              <option value="xinhua">新华网</option>
+              <option value="caixin">财新</option>
+              <option value="36kr">36Kr</option>
+              <option value="cls">财联社</option>
+              <option value="eastmoney">东方财富</option>
+            </select>
+
+            <label for="hotTimeSelect">时间</label>
+            <select id="hotTimeSelect" class="hot-topic-select">
+              <option value="any">不限</option>
+              <option value="24h">24小时</option>
+              <option value="7d">7天</option>
+            </select>
           </div>
 
           <div class="row">
@@ -569,6 +652,9 @@
       const refreshAppsBtn = document.getElementById("refreshAppsBtn");
       const appHealthToggleBtn = document.getElementById("appHealthToggleBtn");
       const appHealthPanel = document.getElementById("appHealth");
+      const hotTopicSelect = document.getElementById("hotTopicSelect");
+      const hotSiteSelect = document.getElementById("hotSiteSelect");
+      const hotTimeSelect = document.getElementById("hotTimeSelect");
 
       appHealthToggleBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -727,6 +813,15 @@
             continue;
           }
 
+          if (Array.isArray(data.items)) {
+            const card = createLinkCard(
+              `网页热点（${data.source || "web"}）`,
+              data.items
+            );
+            container.appendChild(card);
+            continue;
+          }
+
           if (typeof data.path === "string" && typeof data.content === "string") {
             const card = document.createElement("div");
             card.className = "result-card";
@@ -756,6 +851,50 @@
         for (const item of visible) {
           const li = document.createElement("li");
           li.textContent = String(item);
+          ul.appendChild(li);
+        }
+
+        body.appendChild(ul);
+        card.appendChild(head);
+        card.appendChild(body);
+        return card;
+      }
+
+      function createLinkCard(title, items) {
+        const card = document.createElement("div");
+        card.className = "result-card";
+
+        const head = document.createElement("div");
+        head.className = "result-head";
+        head.textContent = `${title}（${items.length} 条）`;
+
+        const body = document.createElement("div");
+        body.className = "result-body";
+
+        const ul = document.createElement("ul");
+        ul.className = "link-list";
+
+        for (const item of items) {
+          if (!item || typeof item !== "object") continue;
+          if (typeof item.url !== "string" || typeof item.title !== "string") continue;
+
+          const li = document.createElement("li");
+          const a = document.createElement("a");
+          a.className = "link-title";
+          a.href = item.url;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          a.textContent = item.title;
+
+          const meta = document.createElement("div");
+          meta.className = "link-meta";
+          const source = typeof item.source === "string" ? item.source : "";
+          const publishedAt =
+            typeof item.publishedAt === "string" ? item.publishedAt : "";
+          meta.textContent = [source, publishedAt].filter(Boolean).join(" | ");
+
+          li.appendChild(a);
+          if (meta.textContent) li.appendChild(meta);
           ul.appendChild(li);
         }
 
@@ -1026,7 +1165,32 @@
 
       async function runCommand(overrideText = "", keepInput = false) {
         const candidate = typeof overrideText === "string" ? overrideText : "";
-        const text = (candidate || input.value).trim();
+        let text = (candidate || input.value).trim();
+        if (/^(?:查当前热点|当前热点|今日热点|热点)$/i.test(text)) {
+          const topic = hotTopicSelect?.value || "general";
+          const site = hotSiteSelect?.value || "all";
+          const timeRange = hotTimeSelect?.value || "any";
+          const topicLabelMap = {
+            general: "综合新闻",
+            ai: "AI",
+            tech: "科技",
+            finance: "财经"
+          };
+          const siteLabelMap = {
+            all: "全部来源",
+            xinhua: "新华网",
+            caixin: "财新",
+            "36kr": "36Kr",
+            cls: "财联社",
+            eastmoney: "东方财富"
+          };
+          const timeLabelMap = {
+            any: "不限时间",
+            "24h": "24小时",
+            "7d": "7天"
+          };
+          text = `查当前热点 ${topicLabelMap[topic] || "综合新闻"} ${siteLabelMap[site] || "全部来源"} ${timeLabelMap[timeRange] || "不限时间"}`;
+        }
         if (!text) {
           status.textContent = "请输入命令";
           return;

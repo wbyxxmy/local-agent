@@ -39,7 +39,7 @@ export function loadConfig(): AppConfig {
     dataDir,
     defaultModel: process.env.DEFAULT_MODEL || "local-main-model",
     shellEnabled: process.env.SHELL_ENABLED !== "false",
-    networkEnabled: process.env.NETWORK_ENABLED === "true",
+    networkEnabled: process.env.NETWORK_ENABLED !== "false",
     planner: {
       localModelEnabled: process.env.LOCAL_MODEL_ENABLED === "true",
       localModelBaseUrl:

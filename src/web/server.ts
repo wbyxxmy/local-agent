@@ -343,6 +343,21 @@ function buildToolMessage(result: unknown): string {
         continue;
       }
 
+      if (Array.isArray(obj.items)) {
+        const topic = typeof obj.topic === "string" ? obj.topic : "general";
+        const site = typeof obj.site === "string" ? obj.site : "all";
+        const timeRange = typeof obj.timeRange === "string" ? obj.timeRange : "any";
+        parts.push(`- 已获取 ${obj.items.length} 条网页热点（主题: ${topic}，来源: ${site}，时间: ${timeRange}）。`);
+        const top = obj.items.slice(0, 3);
+        for (const item of top) {
+          if (!item || typeof item !== "object") continue;
+          const title = typeof item.title === "string" ? item.title : "(无标题)";
+          const url = typeof item.url === "string" ? item.url : "";
+          parts.push(url ? `  - ${title}\n    ${url}` : `  - ${title}`);
+        }
+        continue;
+      }
+
       if (typeof obj.path === "string" && typeof obj.content === "string") {
         const preview = obj.content.slice(0, 600);
         parts.push(`- 已读取 ${obj.path}。`);

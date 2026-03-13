@@ -18,7 +18,9 @@ export function createApp(options: CreateAppOptions = {}) {
   const registry = new ToolRegistry();
   const eventBus = new EventBus();
 
-  registerBuiltinTools(registry, policy);
+  registerBuiltinTools(registry, policy, {
+    networkEnabled: config.networkEnabled
+  });
 
   const planner = new Planner(
     config.planner,

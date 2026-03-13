@@ -7,10 +7,12 @@ import { grepTool } from "./code/grep.js";
 import { createRunCommandTool } from "./shell/run-command.js";
 import { gitStatusTool } from "./git/git-status.js";
 import { openAppTool } from "./system/open-app.js";
+import { createWebSearchTool } from "./web/search-web.js";
 
 export function registerBuiltinTools(
   registry: ToolRegistry,
-  policy: PolicyConfig
+  policy: PolicyConfig,
+  options: { networkEnabled: boolean }
 ) {
   registry.register(createReadFileTool(policy));
   registry.register(createWriteFileTool(policy));
@@ -19,4 +21,5 @@ export function registerBuiltinTools(
   registry.register(createRunCommandTool(policy));
   registry.register(gitStatusTool);
   registry.register(openAppTool);
+  registry.register(createWebSearchTool(options.networkEnabled));
 }

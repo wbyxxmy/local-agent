@@ -495,6 +495,31 @@ export class Planner {
       };
     }
 
+    const webSearchMatch = text.match(/^web\s+(.+)$/i);
+    const likelyWebSearchIntent = this.isLikelyWebSearchIntent(text);
+    if (webSearchMatch || likelyWebSearchIntent) {
+      const selected = this.skills.find((item) => item.name === "web_search");
+      return {
+        steps: [
+          {
+            id: "step_1",
+            kind: "tool_call",
+            content: "Search web topics",
+            toolName: "web_search",
+            input: buildSkillInput(
+              selected ?? {
+                name: "web_search",
+                description: "Search web",
+                toolName: "web_search",
+                keywords: []
+              },
+              text
+            )
+          }
+        ]
+      };
+    }
+
     const grepMatch = text.match(/^grep\s+(.+)$/i);
     if (grepMatch || /(?:search|find|搜索|查找)/i.test(text)) {
       const selected = this.skills.find((item) => item.name === "grep_code");
@@ -591,7 +616,7 @@ export class Planner {
           id: "step_1",
           kind: "answer",
           content:
-            "Unsupported command. Try: `list files`, `read <path>`, `write <path> <<< <content>`, `grep <text>`, `run <command>`, `git status`."
+            "Unsupported command. Try: `list files`, `read <path>`, `write <path> <<< <content>`, `grep <text>`, `web <query>`, `run <command>`, `git status`."
         }
       ]
     };
@@ -611,6 +636,8 @@ export class Planner {
         return "{ command: string }";
       case "open_app":
         return "{ app: string, contact?: string, message?: string, action?: string }";
+      case "web_search":
+        return "{ query?: string, topic?: 'general'|'ai'|'tech'|'finance', site?: 'all'|'xinhua'|'caixin'|'36kr'|'cls'|'eastmoney', timeRange?: 'any'|'24h'|'7d', limit?: number }";
       case "git_status":
         return "{}";
       default:
@@ -688,6 +715,7 @@ export class Planner {
       /^(?:列出|查看).*(?:文件|目录)/.test(text) ||
       /^read\s+.+$/i.test(text) ||
       /^(?:读取|打开|查看)\s+/.test(text) ||
+      this.isLikelyWebSearchIntent(text) ||
       /^grep\s+.+$/i.test(text) ||
       /(?:search|find|搜索|查找)/i.test(text) ||
       /^run\s+.+$/i.test(text) ||
@@ -707,6 +735,24 @@ export class Planner {
     if (this.isLikelyFileReference(normalized)) return false;
 
     return true;
+  }
+
+  private isLikelyWebSearchIntent(text: string) {
+    const normalized = text.trim().toLowerCase();
+    if (!normalized) return false;
+    if (this.isLikelyFileReference(normalized)) return false;
+
+    if (/(?:热点|热搜|热门|新闻|current events|trending|hot topics)/i.test(normalized)) {
+      return true;
+    }
+
+    const hasSearchVerb =
+      /(?:搜索|查一下|查下|查查|查|search|web|internet)/i.test(normalized);
+    const hasCodeHint =
+      /(?:代码|源码|repo|repository|workspace|grep|符号|定义|引用|plannerconfig)/i.test(normalized) ||
+      /\b[a-z_][a-z0-9_]*[A-Z][a-z0-9_]*\b/.test(text.trim());
+
+    return hasSearchVerb && !hasCodeHint;
   }
 
   private isLikelyFileReference(text: string) {

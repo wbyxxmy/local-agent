@@ -107,6 +107,45 @@ export function buildSkillInput(
       };
     }
 
+    case "web_search": {
+      const hotIntent = /(?:热点|热搜|热门|trending|hot\s*topics?)/i.test(normalized);
+      const queryMatch =
+        normalized.match(/(?:搜索|查一下|查下|查查|查|search|web)\s+([\s\S]+)$/i) ||
+        normalized.match(/(?:当前|今天|今日)?\s*(?:热点|热搜|热门)\s*(.*)$/i);
+      const topic = inferWebTopic(normalized);
+      const site = inferWebSite(normalized);
+      const timeRange = inferWebTimeRange(normalized);
+
+      const query = queryMatch?.[1]?.trim();
+      if (query) {
+        return {
+          ...defaults,
+          query,
+          ...(topic ? { topic } : {}),
+          ...(site ? { site } : {}),
+          ...(timeRange ? { timeRange } : {})
+        };
+      }
+
+      if (hotIntent) {
+        return {
+          ...defaults,
+          ...(topic ? { topic } : {}),
+          ...(site ? { site } : {}),
+          ...(timeRange ? { timeRange } : {}),
+          query: topic ? undefined : "今日 热点 新闻"
+        };
+      }
+
+      return {
+        ...defaults,
+        query: text,
+        ...(topic ? { topic } : {}),
+        ...(site ? { site } : {}),
+        ...(timeRange ? { timeRange } : {})
+      };
+    }
+
     case "empty":
       return { ...defaults };
 
@@ -126,6 +165,7 @@ function inferTemplateTypeFromToolName(skillToolName: string):
   | "grep_query"
   | "run_command"
   | "open_app"
+  | "web_search"
   | "empty" {
   switch (skillToolName) {
     case "list_files":
@@ -140,7 +180,62 @@ function inferTemplateTypeFromToolName(skillToolName: string):
       return "run_command";
     case "open_app":
       return "open_app";
+    case "web_search":
+      return "web_search";
     default:
       return "empty";
   }
+}
+
+function inferWebTopic(text: string): "general" | "ai" | "tech" | "finance" | null {
+  if (/(?:ai|人工智能|大模型|llm|机器学习)/i.test(text)) {
+    return "ai";
+  }
+  if (/(?:科技|tech|数码|互联网|芯片|半导体)/i.test(text)) {
+    return "tech";
+  }
+  if (/(?:财经|finance|经济|股市|市场|宏观)/i.test(text)) {
+    return "finance";
+  }
+  if (/(?:热点|热搜|新闻|trending|hot)/i.test(text)) {
+    return "general";
+  }
+  return null;
+}
+
+function inferWebSite(
+  text: string
+): "all" | "xinhua" | "caixin" | "36kr" | "cls" | "eastmoney" | null {
+  if (/(?:新华社|新华网|xinhua)/i.test(text)) {
+    return "xinhua";
+  }
+  if (/(?:财新|caixin)/i.test(text)) {
+    return "caixin";
+  }
+  if (/(?:36kr|36氪)/i.test(text)) {
+    return "36kr";
+  }
+  if (/(?:财联社|cls)/i.test(text)) {
+    return "cls";
+  }
+  if (/(?:东方财富|eastmoney)/i.test(text)) {
+    return "eastmoney";
+  }
+  if (/(?:全部来源|所有来源|all sources)/i.test(text)) {
+    return "all";
+  }
+  return null;
+}
+
+function inferWebTimeRange(text: string): "any" | "24h" | "7d" | null {
+  if (/(?:24h|24小时|一天内|最近一天|过去一天|today)/i.test(text)) {
+    return "24h";
+  }
+  if (/(?:7d|7天|一周内|最近一周|过去一周|week)/i.test(text)) {
+    return "7d";
+  }
+  if (/(?:不限时间|全部时间|任意时间|any time)/i.test(text)) {
+    return "any";
+  }
+  return null;
 }

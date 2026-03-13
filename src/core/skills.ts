@@ -18,6 +18,7 @@ export interface SkillDefinition {
       | "grep_query"
       | "run_command"
       | "open_app"
+      | "web_search"
       | "empty";
     defaults?: Record<string, unknown>;
   };
@@ -106,6 +107,18 @@ export const builtinSkills: SkillDefinition[] = [
     inputTemplate: {
       type: "open_app"
     }
+  },
+  {
+    name: "web_search",
+    description: "Search web/news and return current hot topics",
+    toolName: "web_search",
+    keywords: ["web", "internet", "news", "hot", "trending", "网页", "上网", "新闻", "热点", "热搜", "搜索"],
+    priority: 1,
+    enabled: true,
+    inputTemplate: {
+      type: "web_search",
+      defaults: { limit: 8, topic: "general", site: "all", timeRange: "any" }
+    }
   }
 ];
 
@@ -125,6 +138,7 @@ const skillManifestSchema = z.object({
         "grep_query",
         "run_command",
         "open_app",
+        "web_search",
         "empty"
       ]),
       defaults: z.record(z.unknown()).optional()
