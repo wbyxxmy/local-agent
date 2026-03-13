@@ -44,6 +44,9 @@ Then open:
 
 - `http://localhost:4173`
 
+The Web UI keeps a persistent session per browser tab, so follow-up inputs like
+"再读一下" or "重试" can reuse the previous command context.
+
 Optional custom port:
 
 ```bash

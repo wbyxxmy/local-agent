@@ -10,11 +10,13 @@ import { WebApprover } from "../approval/web-approver.js";
 
 interface RunRequestBody {
   input?: unknown;
+  sessionId?: unknown;
 }
 
 interface ChatRequestBody {
   message?: unknown;
   history?: unknown;
+  sessionId?: unknown;
 }
 
 const webApprover = new WebApprover();
@@ -55,6 +57,10 @@ const server = createServer(async (req, res) => {
       const rawBody = Buffer.concat(chunks).toString("utf8");
       const body = (JSON.parse(rawBody || "{}") as RunRequestBody) ?? {};
       const input = typeof body.input === "string" ? body.input.trim() : "";
+      const sessionId =
+        typeof body.sessionId === "string" && body.sessionId.trim()
+          ? body.sessionId.trim()
+          : undefined;
 
       if (!input) {
         res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
@@ -69,7 +75,7 @@ const server = createServer(async (req, res) => {
 
       app.eventBus.on("*", listener);
       try {
-        const result = await app.agent.run(input);
+        const result = await app.agent.run(input, { sessionId });
 
         res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
         res.end(
@@ -156,6 +162,10 @@ const server = createServer(async (req, res) => {
       const body = (JSON.parse(rawBody || "{}") as ChatRequestBody) ?? {};
       const message = typeof body.message === "string" ? body.message.trim() : "";
       const history = Array.isArray(body.history) ? body.history : [];
+      const requestSessionId =
+        typeof body.sessionId === "string" && body.sessionId.trim()
+          ? body.sessionId.trim()
+          : undefined;
 
       if (!message) {
         res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
@@ -172,7 +182,7 @@ const server = createServer(async (req, res) => {
       let result: unknown;
       let sessionId = "";
       try {
-        result = await app.agent.run(message);
+        result = await app.agent.run(message, { sessionId: requestSessionId });
         sessionId =
           result && typeof result === "object" && typeof (result as { sessionId?: unknown }).sessionId === "string"
             ? ((result as { sessionId: string }).sessionId)

@@ -12,7 +12,16 @@ import type { Approver } from "../approval/types.js";
 export class LocalAgent {
   private readonly executor: ToolExecutor;
   private readonly router = new ToolRouter();
-  private readonly memory = new SessionMemory();
+  private readonly memories = new Map<string, SessionMemory>();
+
+  private getMemory(sessionId: string) {
+    let memory = this.memories.get(sessionId);
+    if (!memory) {
+      memory = new SessionMemory();
+      this.memories.set(sessionId, memory);
+    }
+    return memory;
+  }
 
   constructor(
     private readonly registry: ToolRegistry,
@@ -24,10 +33,11 @@ export class LocalAgent {
     this.executor = new ToolExecutor(registry);
   }
 
-  async run(userInput: string) {
-    const sessionId = nanoid();
+  async run(userInput: string, options: { sessionId?: string } = {}) {
+    const sessionId = options.sessionId?.trim() || nanoid();
+    const memory = this.getMemory(sessionId);
 
-    this.memory.add({
+    memory.add({
       role: "user",
       content: userInput,
       timestamp: Date.now()
@@ -91,6 +101,12 @@ export class LocalAgent {
           data: "Token budget reached. Stopping to avoid extra planning cost."
         });
 
+        memory.add({
+          role: "assistant",
+          content: "Token budget reached. Stopping to avoid extra planning cost.",
+          timestamp: Date.now()
+        });
+
         return {
           sessionId,
           candidateTools: candidateTools.map((t) => t.name),
@@ -105,6 +121,7 @@ export class LocalAgent {
       const plan = await this.planner.createPlan({
         originalInput: userInput,
         observations,
+        recentMessages: memory.getRecent(12),
         turn,
         budgetMode
       });
@@ -139,6 +156,12 @@ export class LocalAgent {
           data: "Token budget reached. Stopping to avoid extra planning cost."
         });
 
+        memory.add({
+          role: "assistant",
+          content: "Token budget reached. Stopping to avoid extra planning cost.",
+          timestamp: Date.now()
+        });
+
         return {
           sessionId,
           candidateTools: candidateTools.map((t) => t.name),
@@ -166,6 +189,11 @@ export class LocalAgent {
               ok: false,
               summary: `router_rejected:${step.toolName}`
             });
+            memory.add({
+              role: "tool",
+              content: `router_rejected:${step.toolName}`,
+              timestamp: Date.now()
+            });
             continue;
           }
 
@@ -180,10 +208,22 @@ export class LocalAgent {
             ...result
           });
 
+          const summary = this.compactResult(result);
+
           observations.push({
             toolName: step.toolName,
             ok: result.ok,
-            summary: this.compactResult(result)
+            summary
+          });
+          memory.add({
+            role: "tool",
+            content: `${step.toolName}: ${summary}`,
+            timestamp: Date.now()
+          });
+          memory.add({
+            role: "assistant",
+            content: this.summarizeToolStep(step.toolName, result),
+            timestamp: Date.now()
           });
           continue;
         }
@@ -192,6 +232,12 @@ export class LocalAgent {
           stepId,
           ok: true,
           data: step.content
+        });
+
+        memory.add({
+          role: "assistant",
+          content: step.content,
+          timestamp: Date.now()
         });
 
         return {
@@ -230,6 +276,39 @@ export class LocalAgent {
 
     const text = JSON.stringify(result.data ?? {});
     return text.slice(0, maxChars);
+  }
+
+  private summarizeToolStep(
+    toolName: string,
+    result: { ok: boolean; data?: unknown; error?: string }
+  ) {
+    if (!result.ok) {
+      return `工具 ${toolName} 执行失败：${result.error || "unknown"}`;
+    }
+
+    const data = result.data;
+    if (!data || typeof data !== "object") {
+      return `工具 ${toolName} 执行成功。`;
+    }
+
+    const row = data as Record<string, unknown>;
+    if (Array.isArray(row.files)) {
+      return `工具 ${toolName} 执行成功，共返回 ${row.files.length} 个文件。`;
+    }
+    if (Array.isArray(row.matches)) {
+      return `工具 ${toolName} 执行成功，共命中 ${row.matches.length} 条结果。`;
+    }
+    if (typeof row.path === "string" && typeof row.content === "string") {
+      return `工具 ${toolName} 执行成功，已读取 ${row.path}。`;
+    }
+    if (typeof row.path === "string" && typeof row.bytesWritten === "number") {
+      return `工具 ${toolName} 执行成功，已写入 ${row.path}。`;
+    }
+    if (typeof row.exitCode === "number") {
+      return `工具 ${toolName} 执行完成，退出码 ${row.exitCode}。`;
+    }
+
+    return `工具 ${toolName} 执行成功。`;
   }
 
   private summarizePlanningBudget(

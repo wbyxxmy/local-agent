@@ -1,3 +1,4 @@
+import type { SessionMessage } from "../memory/session-memory.js";
 import { LocalModelClient } from "../llm/local-model.js";
 import { estimateTokenCount } from "../llm/token-estimator.js";
 import type { ToolEvent } from "../types/tool.js";
@@ -49,6 +50,7 @@ export interface PlannerObservation {
 export interface PlannerRequest {
   originalInput: string;
   observations: PlannerObservation[];
+  recentMessages?: SessionMessage[];
   turn: number;
   budgetMode?: "normal" | "soft";
 }
@@ -129,7 +131,10 @@ export class Planner {
       };
     }
 
-    const plan = this.createPlanByRules(request.originalInput);
+    const plan = this.createPlanByRules(
+      request.originalInput,
+      request.recentMessages ?? []
+    );
     return {
       ...plan,
       meta: {
@@ -229,6 +234,14 @@ export class Planner {
         0,
         this.config.maxPlannerInputChars
       );
+      const recentMessagesText = JSON.stringify(
+        (request.recentMessages ?? [])
+          .slice(-6)
+          .map((item) => ({
+            role: item.role,
+            content: item.content.slice(0, 220)
+          }))
+      );
       const observationText = JSON.stringify(
         request.observations
           .slice(-observationWindow)
@@ -239,7 +252,7 @@ export class Planner {
           }))
       );
       const candidateSkills = shortlistSkills(
-        `${clipped}\n${observationText}`,
+        `${clipped}\n${recentMessagesText}\n${observationText}`,
         skillLimit,
         this.skills
       );
@@ -262,8 +275,9 @@ export class Planner {
             inputHint: this.getInputHint(s.toolName)
           }))
         )}`,
-        `user_input=${JSON.stringify(clipped)}`
-        ,`recent_observations=${observationText}`
+        `recent_messages=${recentMessagesText}`,
+        `user_input=${JSON.stringify(clipped)}`,
+        `recent_observations=${observationText}`
       ].join("\n");
       const promptTokens = estimateTokenCount(prompt);
       const observationTokens = estimateTokenCount(observationText);
@@ -365,7 +379,11 @@ export class Planner {
     }
   }
 
-  private createPlanByRules(userInput: string): Plan {
+  private createPlanByRules(
+    userInput: string,
+    recentMessages: SessionMessage[] = [],
+    allowHistoryFallback = true
+  ): Plan {
     const text = userInput.trim();
 
     const writeMatch = text.match(/^write\s+(.+?)\s+<<<\s*([\s\S]+)$/i);
@@ -498,6 +516,13 @@ export class Planner {
       };
     }
 
+    if (allowHistoryFallback) {
+      const followUp = this.reuseRecentCommand(text, recentMessages);
+      if (followUp) {
+        return this.createPlanByRules(followUp, [], false);
+      }
+    }
+
     const dynamicMatch = shortlistSkills(text, 1, this.skills)[0];
     if (dynamicMatch) {
       const hasKeywordHit = dynamicMatch.keywords.some((keyword) =>
@@ -558,6 +583,82 @@ export class Planner {
     return observations.reduce(
       (sum, item) => sum + estimateTokenCount(item.summary),
       0
+    );
+  }
+
+  private reuseRecentCommand(
+    userInput: string,
+    recentMessages: SessionMessage[]
+  ) {
+    if (!this.shouldReuseRecentCommand(userInput)) {
+      return null;
+    }
+
+    const normalizedCurrent = userInput.trim();
+
+    for (let index = recentMessages.length - 1; index >= 0; index -= 1) {
+      const item = recentMessages[index];
+      if (item.role !== "user") continue;
+
+      const candidate = item.content.trim();
+      if (!candidate || candidate === normalizedCurrent) continue;
+      if (!this.isActionableCommand(candidate)) continue;
+
+      return candidate;
+    }
+
+    return null;
+  }
+
+  private shouldReuseRecentCommand(text: string) {
+    const normalized = text.trim().toLowerCase();
+    if (!normalized) return false;
+    if (this.isActionableCommand(normalized)) return false;
+    if (this.hasSkillKeywordHit(normalized)) return false;
+    if (normalized.length > 18) return false;
+
+    const pureChatSignals = [
+      "你好",
+      "hello",
+      "hi",
+      "谢谢",
+      "thanks",
+      "help",
+      "帮助",
+      "你是谁",
+      "在吗"
+    ];
+    if (pureChatSignals.some((token) => normalized.includes(token))) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private isActionableCommand(text: string) {
+    return (
+      /^write\s+.+\s+<<<\s*[\s\S]+$/i.test(text) ||
+      /(?:写入|保存).*(?:内容|为)|把\s+.+\s+写入\s+.+|(?:打开|新建).*(?:记事本|笔记).*(?:写入|记录)/.test(text) ||
+      /^list files$/i.test(text) ||
+      text.includes("列出文件") ||
+      /^(?:列出|查看).*(?:文件|目录)/.test(text) ||
+      /^read\s+.+$/i.test(text) ||
+      /^(?:读取|打开|查看)\s+/.test(text) ||
+      /^grep\s+.+$/i.test(text) ||
+      /(?:search|find|搜索|查找)/i.test(text) ||
+      /^run\s+.+$/i.test(text) ||
+      /^(?:执行|运行)\s+/.test(text) ||
+      /^git status$/i.test(text) ||
+      /^git\s*状态$/.test(text) ||
+      text === "查看git状态"
+    );
+  }
+
+  private hasSkillKeywordHit(text: string) {
+    return this.skills.some((skill) =>
+      skill.keywords.some((keyword) =>
+        text.includes(keyword.toLowerCase())
+      )
     );
   }
 }

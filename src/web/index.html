@@ -266,6 +266,75 @@
         gap: 8px;
       }
 
+      .approval-summary {
+        border: 1px solid #f0c98b;
+        border-radius: 10px;
+        background: #fff7e8;
+        padding: 10px;
+        font-size: 12px;
+        color: #8a5808;
+      }
+
+      .approval-overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(31, 36, 31, 0.36);
+        backdrop-filter: blur(4px);
+        z-index: 20;
+      }
+
+      .approval-overlay.visible {
+        display: flex;
+      }
+
+      .approval-panel {
+        width: min(720px, 100%);
+        max-height: min(78dvh, 760px);
+        overflow: auto;
+        border: 1px solid #efc17a;
+        border-radius: 18px;
+        background: #fffdf7;
+        box-shadow: 0 24px 64px rgba(46, 34, 15, 0.2);
+      }
+
+      .approval-panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid #f1dcc0;
+        background: linear-gradient(180deg, #fff4dc 0%, #fffaf1 100%);
+      }
+
+      .approval-panel-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: #7a4d06;
+      }
+
+      .approval-panel-sub {
+        margin-top: 2px;
+        font-size: 12px;
+        color: #7b6542;
+      }
+
+      .approval-panel-body {
+        padding: 16px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .approval-close {
+        background: #fff;
+        color: #7b6542;
+        border-color: #ead7b5;
+      }
+
       .approval-card {
         border: 1px solid #f0c98b;
         border-radius: 10px;
@@ -357,6 +426,19 @@
       </section>
     </main>
 
+    <div class="approval-overlay" id="approvalOverlay">
+      <div class="approval-panel" role="dialog" aria-modal="true" aria-labelledby="approvalPanelTitle">
+        <div class="approval-panel-head">
+          <div>
+            <div class="approval-panel-title" id="approvalPanelTitle">待处理审批</div>
+            <div class="approval-panel-sub" id="approvalPanelSub">检测到需要人工确认的操作。</div>
+          </div>
+          <button class="approval-close" id="approvalCloseBtn">稍后处理</button>
+        </div>
+        <div class="approval-panel-body" id="approvalModalList"></div>
+      </div>
+    </div>
+
     <script>
       const input = document.getElementById("input");
       const status = document.getElementById("status");
@@ -364,9 +446,15 @@
       const clearBtn = document.getElementById("clearBtn");
       const messages = document.getElementById("messages");
       const approvals = document.getElementById("approvals");
+      const approvalOverlay = document.getElementById("approvalOverlay");
+      const approvalModalList = document.getElementById("approvalModalList");
+      const approvalPanelSub = document.getElementById("approvalPanelSub");
+      const approvalCloseBtn = document.getElementById("approvalCloseBtn");
       const chatHistory = [];
       let approvalPoller = null;
       let currentSessionId = "";
+      let approvalOverlayDismissed = false;
+      let awaitingAgentResponse = false;
 
       function addBubble(role, text, options = {}) {
         const { raw = null, withActions = false, retryText = "", typing = false } = options;
@@ -555,8 +643,9 @@
       }
 
       async function fetchPendingApprovals() {
-        const qs = currentSessionId
-          ? `?sessionId=${encodeURIComponent(currentSessionId)}`
+        const scopedSessionId = awaitingAgentResponse ? "" : currentSessionId;
+        const qs = scopedSessionId
+          ? `?sessionId=${encodeURIComponent(scopedSessionId)}`
           : "";
         const res = await fetch(`/api/approvals${qs}`);
         if (!res.ok) return [];
@@ -576,72 +665,103 @@
         }
       }
 
+      function hideApprovalOverlay() {
+        approvalOverlay.classList.remove("visible");
+      }
+
+      function showApprovalOverlay() {
+        approvalOverlay.classList.add("visible");
+      }
+
+      function createApprovalCard(item) {
+        const card = document.createElement("div");
+        card.className = "approval-card";
+
+        const title = document.createElement("div");
+        title.className = "approval-title";
+        title.textContent = `待审批: ${item.toolName}`;
+
+        const meta = document.createElement("div");
+        meta.className = "approval-meta";
+        meta.textContent = `风险: ${item.riskLevel} | 原因: ${item.reason}`;
+
+        card.appendChild(title);
+        card.appendChild(meta);
+
+        if (item.preview !== undefined) {
+          const pre = document.createElement("pre");
+          pre.textContent = JSON.stringify(item.preview, null, 2);
+          card.appendChild(pre);
+        }
+
+        const btns = document.createElement("div");
+        btns.className = "approval-buttons";
+
+        const approveBtn = document.createElement("button");
+        approveBtn.className = "approve";
+        approveBtn.textContent = "通过";
+
+        const rejectBtn = document.createElement("button");
+        rejectBtn.className = "reject";
+        rejectBtn.textContent = "拒绝";
+
+        approveBtn.addEventListener("click", async () => {
+          approveBtn.disabled = true;
+          rejectBtn.disabled = true;
+          try {
+            await resolveApproval(item.id, true);
+            status.textContent = "已通过审批，继续执行...";
+            await pollApprovalsOnce();
+          } catch (err) {
+            status.textContent = `审批失败: ${err instanceof Error ? err.message : String(err)}`;
+            approveBtn.disabled = false;
+            rejectBtn.disabled = false;
+          }
+        });
+
+        rejectBtn.addEventListener("click", async () => {
+          approveBtn.disabled = true;
+          rejectBtn.disabled = true;
+          try {
+            await resolveApproval(item.id, false);
+            status.textContent = "已拒绝审批";
+            await pollApprovalsOnce();
+          } catch (err) {
+            status.textContent = `审批失败: ${err instanceof Error ? err.message : String(err)}`;
+            approveBtn.disabled = false;
+            rejectBtn.disabled = false;
+          }
+        });
+
+        btns.appendChild(approveBtn);
+        btns.appendChild(rejectBtn);
+        card.appendChild(btns);
+        return card;
+      }
+
       function renderApprovals(pending) {
         approvals.innerHTML = "";
-        if (!Array.isArray(pending) || pending.length === 0) return;
+        approvalModalList.innerHTML = "";
+
+        if (!Array.isArray(pending) || pending.length === 0) {
+          approvalOverlayDismissed = false;
+          hideApprovalOverlay();
+          return;
+        }
+
+        const summary = document.createElement("div");
+        summary.className = "approval-summary";
+        summary.textContent = `当前有 ${pending.length} 个待审批操作，请在弹窗中确认。`;
+        approvals.appendChild(summary);
+
+        approvalPanelSub.textContent = `检测到 ${pending.length} 个需要人工确认的操作。`;
 
         for (const item of pending) {
-          const card = document.createElement("div");
-          card.className = "approval-card";
+          approvalModalList.appendChild(createApprovalCard(item));
+        }
 
-          const title = document.createElement("div");
-          title.className = "approval-title";
-          title.textContent = `待审批: ${item.toolName}`;
-
-          const meta = document.createElement("div");
-          meta.className = "approval-meta";
-          meta.textContent = `风险: ${item.riskLevel} | 原因: ${item.reason}`;
-
-          card.appendChild(title);
-          card.appendChild(meta);
-
-          if (item.preview !== undefined) {
-            const pre = document.createElement("pre");
-            pre.textContent = JSON.stringify(item.preview, null, 2);
-            card.appendChild(pre);
-          }
-
-          const btns = document.createElement("div");
-          btns.className = "approval-buttons";
-
-          const approveBtn = document.createElement("button");
-          approveBtn.className = "approve";
-          approveBtn.textContent = "通过";
-          approveBtn.addEventListener("click", async () => {
-            approveBtn.disabled = true;
-            rejectBtn.disabled = true;
-            try {
-              await resolveApproval(item.id, true);
-              status.textContent = "已通过审批，继续执行...";
-              await pollApprovalsOnce();
-            } catch (err) {
-              status.textContent = `审批失败: ${err instanceof Error ? err.message : String(err)}`;
-              approveBtn.disabled = false;
-              rejectBtn.disabled = false;
-            }
-          });
-
-          const rejectBtn = document.createElement("button");
-          rejectBtn.className = "reject";
-          rejectBtn.textContent = "拒绝";
-          rejectBtn.addEventListener("click", async () => {
-            approveBtn.disabled = true;
-            rejectBtn.disabled = true;
-            try {
-              await resolveApproval(item.id, false);
-              status.textContent = "已拒绝审批";
-              await pollApprovalsOnce();
-            } catch (err) {
-              status.textContent = `审批失败: ${err instanceof Error ? err.message : String(err)}`;
-              approveBtn.disabled = false;
-              rejectBtn.disabled = false;
-            }
-          });
-
-          btns.appendChild(approveBtn);
-          btns.appendChild(rejectBtn);
-          card.appendChild(btns);
-          approvals.appendChild(card);
+        if (!approvalOverlayDismissed) {
+          showApprovalOverlay();
         }
       }
 
@@ -667,7 +787,6 @@
         if (!approvalPoller) return;
         clearInterval(approvalPoller);
         approvalPoller = null;
-        approvals.innerHTML = "";
       }
 
       async function runCommand(overrideText = "", keepInput = false) {
@@ -683,6 +802,8 @@
         if (!keepInput) input.value = "";
         runBtn.disabled = true;
         status.textContent = "执行中...";
+        approvalOverlayDismissed = false;
+        awaitingAgentResponse = true;
         startApprovalPolling();
 
         const pending = addBubble("assistant", "正在调用 Agent...");
@@ -693,13 +814,15 @@
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               message: text,
-              history: chatHistory
+              history: chatHistory,
+              sessionId: currentSessionId || undefined
             })
           });
           const data = await res.json();
           if (typeof data?.sessionId === "string") {
             currentSessionId = data.sessionId;
           }
+          awaitingAgentResponse = false;
 
           const summary =
             typeof data?.message === "string"
@@ -715,6 +838,7 @@
           chatHistory.push({ role: "assistant", content: summary });
           status.textContent = res.ok ? "完成" : "失败";
         } catch (err) {
+          awaitingAgentResponse = false;
           pending.remove();
           const failText =
             `请求失败：${err instanceof Error ? err.message : String(err)}`;
@@ -749,9 +873,27 @@
         messages.innerHTML = "";
         chatHistory.length = 0;
         currentSessionId = "";
+        awaitingAgentResponse = false;
         approvals.innerHTML = "";
+        approvalModalList.innerHTML = "";
+        approvalOverlayDismissed = false;
+        hideApprovalOverlay();
         status.textContent = "会话已清空";
       });
+
+      approvalCloseBtn.addEventListener("click", () => {
+        approvalOverlayDismissed = true;
+        hideApprovalOverlay();
+      });
+
+      approvalOverlay.addEventListener("click", (event) => {
+        if (event.target === approvalOverlay) {
+          approvalOverlayDismissed = true;
+          hideApprovalOverlay();
+        }
+      });
+
+      startApprovalPolling();
 
       for (const el of document.querySelectorAll(".chip")) {
         el.addEventListener("click", () => {
