@@ -73,26 +73,55 @@ export function createWebSearchTool(networkEnabled: boolean): ToolDefinition<
       const limit = input.limit;
 
       try {
-        const rssUrl =
-          "https://news.google.com/rss/search?q=" +
-          encodeURIComponent(query) +
-          "&hl=zh-CN&gl=CN&ceid=CN:zh-Hans";
-
-        const response = await fetch(rssUrl, {
-          headers: {
-            "user-agent": "local-agent/1.0"
+        const urls = [
+          {
+            source: "google_news_rss",
+            url:
+              "https://news.google.com/rss/search?q=" +
+              encodeURIComponent(query) +
+              "&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+            parser: parseGoogleNewsRss
+          },
+          {
+            source: "bing_news_rss",
+            url:
+              "https://www.bing.com/news/search?q=" +
+              encodeURIComponent(query) +
+              "&setlang=zh-cn&format=rss",
+            parser: parseGenericRss
           }
-        });
+        ];
 
-        if (!response.ok) {
-          return {
-            ok: false,
-            error: `Web search failed: ${response.status}`
-          };
+        const errors: string[] = [];
+        let selectedSource = "";
+        let items: NewsItem[] = [];
+
+        for (const candidate of urls) {
+          for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+              const xml = await fetchTextWithTimeout(candidate.url, 9000);
+              const parsedItems = candidate.parser(xml).slice(0, limit);
+              if (parsedItems.length === 0) {
+                errors.push(`${candidate.source}:empty_result`);
+                continue;
+              }
+              selectedSource = candidate.source;
+              items = parsedItems;
+              break;
+            } catch (error) {
+              const msg = error instanceof Error ? error.message : String(error);
+              errors.push(`${candidate.source}:attempt_${attempt}:${msg}`);
+            }
+          }
+          if (items.length > 0) break;
         }
 
-        const xml = await response.text();
-        const items = parseGoogleNewsRss(xml).slice(0, limit);
+        if (items.length === 0) {
+          return {
+            ok: false,
+            error: `Web search failed. ${errors.slice(0, 4).join(" | ")}`
+          };
+        }
 
         return {
           ok: true,
@@ -101,7 +130,7 @@ export function createWebSearchTool(networkEnabled: boolean): ToolDefinition<
             topic,
             site,
             timeRange,
-            source: "google_news_rss",
+            source: selectedSource,
             fetchedAt: new Date().toISOString(),
             items
           }
@@ -137,6 +166,52 @@ function parseGoogleNewsRss(xml: string): NewsItem[] {
   }
 
   return rows;
+}
+
+function parseGenericRss(xml: string): NewsItem[] {
+  const rows: NewsItem[] = [];
+  const itemBlocks = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
+
+  for (const block of itemBlocks) {
+    const title = decodeHtmlEntities(extractTag(block, "title") || "").trim();
+    const url = decodeHtmlEntities(extractTag(block, "link") || "").trim();
+    const source = decodeHtmlEntities(
+      extractTag(block, "source") || extractTag(block, "News:Source") || ""
+    ).trim();
+    const publishedAt = (extractTag(block, "pubDate") || "").trim();
+
+    if (!title || !url) continue;
+
+    rows.push({
+      title,
+      url,
+      ...(source ? { source } : {}),
+      ...(publishedAt ? { publishedAt } : {})
+    });
+  }
+
+  return rows;
+}
+
+async function fetchTextWithTimeout(url: string, timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "user-agent": "local-agent/1.0"
+      },
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      throw new Error(`http_${response.status}`);
+    }
+
+    return await response.text();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function extractTag(block: string, tag: string): string | null {

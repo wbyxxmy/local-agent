@@ -116,7 +116,7 @@ export function buildSkillInput(
       const site = inferWebSite(normalized);
       const timeRange = inferWebTimeRange(normalized);
 
-      const query = queryMatch?.[1]?.trim();
+      const query = stripWebControlTokens(queryMatch?.[1] || "").trim();
       if (query) {
         return {
           ...defaults,
@@ -139,7 +139,7 @@ export function buildSkillInput(
 
       return {
         ...defaults,
-        query: text,
+        query: stripWebControlTokens(text),
         ...(topic ? { topic } : {}),
         ...(site ? { site } : {}),
         ...(timeRange ? { timeRange } : {})
@@ -238,4 +238,14 @@ function inferWebTimeRange(text: string): "any" | "24h" | "7d" | null {
     return "any";
   }
   return null;
+}
+
+function stripWebControlTokens(text: string) {
+  return text
+    .replace(/(?:查当前热点|当前热点|今日热点|热点)/gi, " ")
+    .replace(/(?:综合新闻|综合|ai|人工智能|科技|财经)/gi, " ")
+    .replace(/(?:全部来源|所有来源|新华网|新华社|财新|36kr|36氪|财联社|东方财富)/gi, " ")
+    .replace(/(?:不限时间|24小时|7天|一天内|一周内|today|week)/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }

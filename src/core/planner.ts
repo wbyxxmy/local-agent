@@ -133,12 +133,16 @@ export class Planner {
     if (fromModel) return fromModel;
 
     if (request.observations.length > 0) {
+      const lastObservation = request.observations[request.observations.length - 1];
+      const fallbackText = lastObservation?.ok
+        ? "Done with available rule planner path."
+        : `上一步工具执行失败：${lastObservation?.summary || "unknown"}`;
       return {
         steps: [
           {
             id: "step_1",
             kind: "answer",
-            content: "Done with available rule planner path."
+            content: fallbackText
           }
         ],
         meta: {
