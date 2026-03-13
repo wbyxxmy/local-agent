@@ -112,6 +112,7 @@ export function buildSkillInput(
       const queryMatch =
         normalized.match(/(?:搜索|查一下|查下|查查|查|search|web)\s+([\s\S]+)$/i) ||
         normalized.match(/(?:当前|今天|今日)?\s*(?:热点|热搜|热门)\s*(.*)$/i);
+      const engine = inferWebEngine(normalized);
       const topic = inferWebTopic(normalized);
       const site = inferWebSite(normalized);
       const timeRange = inferWebTimeRange(normalized);
@@ -121,6 +122,7 @@ export function buildSkillInput(
         return {
           ...defaults,
           query,
+          ...(engine ? { engine } : {}),
           ...(topic ? { topic } : {}),
           ...(site ? { site } : {}),
           ...(timeRange ? { timeRange } : {})
@@ -130,6 +132,7 @@ export function buildSkillInput(
       if (hotIntent) {
         return {
           ...defaults,
+          ...(engine ? { engine } : {}),
           ...(topic ? { topic } : {}),
           ...(site ? { site } : {}),
           ...(timeRange ? { timeRange } : {}),
@@ -140,6 +143,7 @@ export function buildSkillInput(
       return {
         ...defaults,
         query: stripWebControlTokens(text),
+        ...(engine ? { engine } : {}),
         ...(topic ? { topic } : {}),
         ...(site ? { site } : {}),
         ...(timeRange ? { timeRange } : {})
@@ -203,6 +207,22 @@ function inferWebTopic(text: string): "general" | "ai" | "tech" | "finance" | nu
   return null;
 }
 
+function inferWebEngine(text: string): "auto" | "google" | "bing" | "baidu" | null {
+  if (/(?:百度|baidu)/i.test(text)) {
+    return "baidu";
+  }
+  if (/(?:必应|bing)/i.test(text)) {
+    return "bing";
+  }
+  if (/(?:谷歌|google)/i.test(text)) {
+    return "google";
+  }
+  if (/(?:自动引擎|auto engine|自动)/i.test(text)) {
+    return "auto";
+  }
+  return null;
+}
+
 function inferWebSite(
   text: string
 ): "all" | "xinhua" | "caixin" | "36kr" | "cls" | "eastmoney" | null {
@@ -244,6 +264,7 @@ function stripWebControlTokens(text: string) {
   return text
     .replace(/(?:查当前热点|当前热点|今日热点|热点)/gi, " ")
     .replace(/(?:综合新闻|综合|ai|人工智能|科技|财经)/gi, " ")
+    .replace(/(?:百度|baidu|必应|bing|谷歌|google|自动引擎|自动)/gi, " ")
     .replace(/(?:全部来源|所有来源|新华网|新华社|财新|36kr|36氪|财联社|东方财富)/gi, " ")
     .replace(/(?:不限时间|24小时|7天|一天内|一周内|today|week)/gi, " ")
     .replace(/\s+/g, " ")

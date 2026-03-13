@@ -344,17 +344,13 @@ function buildToolMessage(result: unknown): string {
       }
 
       if (Array.isArray(obj.items)) {
-        const topic = typeof obj.topic === "string" ? obj.topic : "general";
-        const site = typeof obj.site === "string" ? obj.site : "all";
-        const timeRange = typeof obj.timeRange === "string" ? obj.timeRange : "any";
-        parts.push(`- 已获取 ${obj.items.length} 条网页热点（主题: ${topic}，来源: ${site}，时间: ${timeRange}）。`);
-        const top = obj.items.slice(0, 3);
-        for (const item of top) {
-          if (!item || typeof item !== "object") continue;
-          const title = typeof item.title === "string" ? item.title : "(无标题)";
-          const url = typeof item.url === "string" ? item.url : "";
-          parts.push(url ? `  - ${title}\n    ${url}` : `  - ${title}`);
+        const engine = typeof obj.engine === "string" ? obj.engine : "auto";
+        const degraded = obj.degraded === true;
+        parts.push(`- 已获取 ${obj.items.length} 条网页热点（引擎: ${engine}）。`);
+        if (degraded) {
+          parts.push("- 当前网络检索不稳定，已自动返回热点入口链接供你点击查看。");
         }
+        parts.push("- 详细结果已显示在下方“热点结果”面板。");
         continue;
       }
 

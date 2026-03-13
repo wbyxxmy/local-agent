@@ -132,20 +132,26 @@
         margin-bottom: 10px;
       }
 
-      .hot-topic-row {
+      .head-tools {
         display: flex;
         align-items: center;
-        gap: 8px;
-        margin-bottom: 10px;
-        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 2px;
       }
 
-      .hot-topic-row label {
+      .engine-select-wrap {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .engine-select-wrap label {
         font-size: 12px;
         color: #6b5d46;
+        white-space: nowrap;
       }
 
-      .hot-topic-select {
+      .engine-select {
         border: 1px solid var(--line);
         border-radius: 8px;
         padding: 6px 10px;
@@ -153,6 +159,20 @@
         color: #3d423f;
         font: inherit;
         font-size: 12px;
+      }
+
+      .web-results-section {
+        border-top: 1px solid var(--line);
+        background: #fffaf0;
+        padding: 10px 12px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .web-results-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #6b5d46;
       }
 
       .app-health {
@@ -563,7 +583,18 @@
             <h1>Local Agent Chat</h1>
             <p class="sub">现在是聊天模式：默认展示可读回复，技术 JSON 放在详情里。</p>
           </div>
-          <button class="action-btn" id="appHealthToggleBtn" style="white-space:nowrap;margin-top:4px">应用状态</button>
+          <div class="head-tools">
+            <div class="engine-select-wrap">
+              <label for="hotEngineSelect">搜索引擎</label>
+              <select id="hotEngineSelect" class="engine-select">
+                <option value="auto">自动</option>
+                <option value="google">Google</option>
+                <option value="bing">Bing</option>
+                <option value="baidu">百度</option>
+              </select>
+            </div>
+            <button class="action-btn" id="appHealthToggleBtn" style="white-space:nowrap;margin-top:0">应用状态</button>
+          </div>
           <div class="app-health" id="appHealth">
             <div class="app-health-head">
               <span id="appHealthMeta">应用启动器状态加载中...</span>
@@ -575,6 +606,11 @@
 
         <section class="messages" id="messages"></section>
 
+        <section class="web-results-section" id="webResultsSection" hidden>
+          <div class="web-results-title">热点结果</div>
+          <div id="webResultsPanel"></div>
+        </section>
+
         <section class="composer">
           <div class="chips">
             <button class="chip" data-sample="list files">list files</button>
@@ -583,33 +619,6 @@
             <button class="chip" data-sample="查当前热点">查当前热点</button>
             <button class="chip" data-sample="git status">git status</button>
             <button class="chip" data-sample="打开微信">打开微信</button>
-          </div>
-
-          <div class="hot-topic-row">
-            <label for="hotTopicSelect">热点主题</label>
-            <select id="hotTopicSelect" class="hot-topic-select">
-              <option value="general">综合</option>
-              <option value="ai">AI</option>
-              <option value="tech">科技</option>
-              <option value="finance">财经</option>
-            </select>
-
-            <label for="hotSiteSelect">来源</label>
-            <select id="hotSiteSelect" class="hot-topic-select">
-              <option value="all">全部</option>
-              <option value="xinhua">新华网</option>
-              <option value="caixin">财新</option>
-              <option value="36kr">36Kr</option>
-              <option value="cls">财联社</option>
-              <option value="eastmoney">东方财富</option>
-            </select>
-
-            <label for="hotTimeSelect">时间</label>
-            <select id="hotTimeSelect" class="hot-topic-select">
-              <option value="any">不限</option>
-              <option value="24h">24小时</option>
-              <option value="7d">7天</option>
-            </select>
           </div>
 
           <div class="row">
@@ -652,9 +661,9 @@
       const refreshAppsBtn = document.getElementById("refreshAppsBtn");
       const appHealthToggleBtn = document.getElementById("appHealthToggleBtn");
       const appHealthPanel = document.getElementById("appHealth");
-      const hotTopicSelect = document.getElementById("hotTopicSelect");
-      const hotSiteSelect = document.getElementById("hotSiteSelect");
-      const hotTimeSelect = document.getElementById("hotTimeSelect");
+      const hotEngineSelect = document.getElementById("hotEngineSelect");
+      const webResultsSection = document.getElementById("webResultsSection");
+      const webResultsPanel = document.getElementById("webResultsPanel");
 
       appHealthToggleBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -814,11 +823,7 @@
           }
 
           if (Array.isArray(data.items)) {
-            const card = createLinkCard(
-              `网页热点（${data.source || "web"}）`,
-              data.items
-            );
-            container.appendChild(card);
+            renderWebResultPanel(data);
             continue;
           }
 
@@ -902,6 +907,14 @@
         card.appendChild(head);
         card.appendChild(body);
         return card;
+      }
+
+      function renderWebResultPanel(data) {
+        webResultsPanel.innerHTML = "";
+        const title = `网页热点（${data.source || "web"}）`;
+        const card = createLinkCard(title, Array.isArray(data.items) ? data.items : []);
+        webResultsPanel.appendChild(card);
+        webResultsSection.hidden = false;
       }
 
       function escapeHtml(text) {
@@ -1167,29 +1180,14 @@
         const candidate = typeof overrideText === "string" ? overrideText : "";
         let text = (candidate || input.value).trim();
         if (/^(?:查当前热点|当前热点|今日热点|热点)$/i.test(text)) {
-          const topic = hotTopicSelect?.value || "general";
-          const site = hotSiteSelect?.value || "all";
-          const timeRange = hotTimeSelect?.value || "any";
-          const topicLabelMap = {
-            general: "综合新闻",
-            ai: "AI",
-            tech: "科技",
-            finance: "财经"
+          const engine = hotEngineSelect?.value || "auto";
+          const engineLabelMap = {
+            auto: "自动",
+            google: "Google",
+            bing: "Bing",
+            baidu: "百度"
           };
-          const siteLabelMap = {
-            all: "全部来源",
-            xinhua: "新华网",
-            caixin: "财新",
-            "36kr": "36Kr",
-            cls: "财联社",
-            eastmoney: "东方财富"
-          };
-          const timeLabelMap = {
-            any: "不限时间",
-            "24h": "24小时",
-            "7d": "7天"
-          };
-          text = `查当前热点 ${topicLabelMap[topic] || "综合新闻"} ${siteLabelMap[site] || "全部来源"} ${timeLabelMap[timeRange] || "不限时间"}`;
+          text = `查当前热点 ${engineLabelMap[engine] || "自动"}`;
         }
         if (!text) {
           status.textContent = "请输入命令";
@@ -1270,6 +1268,8 @@
 
       clearBtn.addEventListener("click", () => {
         messages.innerHTML = "";
+        webResultsPanel.innerHTML = "";
+        webResultsSection.hidden = true;
         chatHistory.length = 0;
         currentSessionId = "";
         awaitingAgentResponse = false;

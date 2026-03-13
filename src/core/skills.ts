@@ -117,7 +117,7 @@ export const builtinSkills: SkillDefinition[] = [
     enabled: true,
     inputTemplate: {
       type: "web_search",
-      defaults: { limit: 8, topic: "general", site: "all", timeRange: "any" }
+      defaults: { limit: 8, engine: "auto" }
     }
   }
 ];
